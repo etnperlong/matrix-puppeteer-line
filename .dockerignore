@@ -1,0 +1,10 @@
+.editorconfig
+logs
+.venv
+start
+config.yaml
+registration.yaml
+*.db
+*.pickle
+profiles
+node_modules

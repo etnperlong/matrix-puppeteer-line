@@ -1,0 +1,17 @@
+{
+  "name": "mautrix-amp-puppeteer",
+  "version": "0.1.0",
+  "description": "Puppeteer module for mautrix-amp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://mau.dev/tulir/mautrix-amp.git"
+  },
+  "main": "src/main.js",
+  "author": "Tulir Asokan <tulir@maunium.net>",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://mau.dev/tulir/mautrix-amp",
+  "dependencies": {
+    "chrono-node": "^2.1.7",
+    "puppeteer": "^5.2.1"
+  }
+}
