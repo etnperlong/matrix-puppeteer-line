@@ -149,10 +149,15 @@ export default class Client {
 			this.log("Ignoring line, client is stopped")
 			return
 		}
-		const req = JSON.parse(line)
+		let req
+		try {
+			req = JSON.parse(line)
+		} catch (err) {
+			this.log("Non-JSON request:", line)
+			return
+		}
 		if (!req.command || !req.id) {
-			console.log("Invalid request, terminating", this.connID)
-			await this.stop()
+			this.log("Invalid request:", line)
 			return
 		}
 		if (req.id <= this.maxCommandID) {
