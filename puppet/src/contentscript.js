@@ -84,11 +84,11 @@ class MautrixController {
 	/**
 	 * @typedef MessageData
 	 * @type {object}
-	 * @property {number}  id         - The ID of the message. Seems to be sequential.
-	 * @property {number}  timestamp  - The unix timestamp of the message. Not very accurate.
-	 * @property {boolean} isOutgoing - Whether or not this user sent the message.
-	 * @property {string}  [text]     - The text in the message.
-	 * @property {string}  [image]    - The URL to the image in the message.
+	 * @property {number}  id          - The ID of the message. Seems to be sequential.
+	 * @property {number}  timestamp   - The unix timestamp of the message. Not very accurate.
+	 * @property {boolean} is_outgoing - Whether or not this user sent the message.
+	 * @property {string}  [text]      - The text in the message.
+	 * @property {string}  [image]     - The URL to the image in the message.
 	 */
 
 	/**
@@ -103,7 +103,7 @@ class MautrixController {
 		const messageData = {
 			id: +element.getAttribute("msg-id"),
 			timestamp: date ? date.getTime() : null,
-			isOutgoing: element.getAttribute("is-outgoing") === "true",
+			is_outgoing: element.getAttribute("is-outgoing") === "true",
 		}
 		messageData.text = element.querySelector("mws-text-message-part .text-msg")?.innerText
 		if (element.querySelector("mws-image-message-part .image-msg")) {
@@ -124,13 +124,13 @@ class MautrixController {
 		let messageDate = null
 		for (const child of element.children) {
 			switch (child.tagName.toLowerCase()) {
-				case "mws-message-wrapper":
-					messages.push(this._parseMessage(messageDate, child))
-					break
-				case "mws-tombstone-message-wrapper":
-					const dateText = child.getElementsByTagName("mws-relative-timestamp")?.[0]?.innerText
-					messageDate = (await this._parseDate(dateText, messageDate)) || messageDate
-					break
+			case "mws-message-wrapper":
+				messages.push(this._parseMessage(messageDate, child))
+				break
+			case "mws-tombstone-message-wrapper":
+				const dateText = child.querySelector("mws-relative-timestamp")?.innerText
+				messageDate = await this._parseDate(dateText, messageDate) || messageDate
+				break
 			}
 		}
 		return messages
@@ -168,7 +168,8 @@ class MautrixController {
 	 * @type object
 	 * @property {number} id - The ID of the chat.
 	 * @property {string} name - The name of the chat.
-	 * @property {string} lastMsg - The most recent message in the chat. May be prefixed by sender name.
+	 * @property {string} lastMsg - The most recent message in the chat.
+	 *                              May be prefixed by sender name.
 	 * @property {string} lastMsgDate - An imprecise date for the most recent message (e.g. "7:16 PM", "Thu" or "Aug 4")
 	 */
 
@@ -225,7 +226,8 @@ class MautrixController {
 	 * @return {Promise<string>} - The data URL (containing the mime type and base64 data)
 	 */
 	async readImage(id) {
-		const resp = await fetch(url)
+		const imageElement = document.querySelector(`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
+		const resp = await fetch(imageElement.getAttribute(src))
 		const reader = new FileReader()
 		const promise = new Promise((resolve, reject) => {
 			reader.onload = () => resolve(reader.result)

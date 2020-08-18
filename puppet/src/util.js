@@ -13,23 +13,31 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import process from "process"
 
-import PuppetAPI from "./api.js"
-
-const api = new PuppetAPI()
-
-function stop() {
-	api.stop().then(() => process.exit(0), err => {
-		console.error("[Main] Error stopping:", err)
-		process.exit(3)
+export function promisify(func) {
+	return new Promise((resolve, reject) => {
+		try {
+			func(err => err ? reject(err) : resolve())
+		} catch (err) {
+			reject(err)
+		}
 	})
 }
 
-api.start().then(() => {
-	process.once("SIGINT", stop)
-	process.once("SIGTERM", stop)
-}, err => {
-	console.error("[Main] Error starting:", err)
-	process.exit(2)
-})
+export function sleep(timeout) {
+	return new Promise(resolve => setTimeout(resolve, timeout))
+}
+
+export function emitLines(stream) {
+	let buffer = ""
+	stream.on("data", data => {
+		buffer += data
+		let n = buffer.indexOf("\n")
+		while (~n) {
+			stream.emit("line", buffer.substring(0, n))
+			buffer = buffer.substring(n + 1)
+			n = buffer.indexOf("\n")
+		}
+	})
+	stream.on("end", () => buffer && stream.emit("line", buffer))
+}

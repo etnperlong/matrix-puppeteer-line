@@ -13,3 +13,56 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import net from "net"
+import fs from "fs"
+import path from "path"
+
+import Client from "./client.js"
+import { promisify } from "./util.js"
+
+export default class PuppetAPI {
+	path = "/var/run/mautrix-amp/puppet.sock"
+
+	constructor() {
+		this.server = net.createServer(sock =>
+			new Client(this, sock, ++this.connIDSequence).start())
+		this.puppets = new Map()
+		this.clients = new Map()
+		this.connIDSequence = 0
+	}
+
+	log(...text) {
+		console.log("[API]", ...text)
+	}
+
+	async start() {
+		this.log("Starting server")
+
+		try {
+			await fs.promises.access(path.dirname(this.path))
+		} catch (err) {
+			await fs.promises.mkdir(path.dirname(this.path), 0o700)
+		}
+		try {
+			await fs.promises.unlink(this.path)
+		} catch (err) {}
+		await promisify(cb => this.server.listen(this.path, cb))
+		await fs.promises.chmod(this.path, 0o700)
+		this.log("Now listening at", this.path)
+	}
+
+	async stop() {
+		this.log("Stopping server")
+		await promisify(cb => this.server.close(cb))
+		try {
+			await fs.promises.unlink(this.path)
+		} catch (err) {}
+		this.log("Server stopped")
+		for (const client of this.clients.values()) {
+			await client.stop()
+		}
+		for (const puppet of this.puppets.values()) {
+			await puppet.stop()
+		}
+	}
+}

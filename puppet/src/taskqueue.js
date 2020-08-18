@@ -14,18 +14,27 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-class TaskQueue {
-	constructor() {
+export default class TaskQueue {
+	constructor(id) {
+		this.id = id
 		this._tasks = []
 		this.running = false
 		this._wakeup = null
 	}
 
+	log(...text) {
+		console.log(`[TaskQueue/${this.id}]`, ...text)
+	}
+
+	error(...text) {
+		console.error(`[TaskQueue/${this.id}]`, ...text)
+	}
+
 	async _run() {
-		console.log("Started processing tasks")
+		this.log("Started processing tasks")
 		while (this.running) {
 			if (this._tasks.length === 0) {
-				console.log("Sleeping until a new task is received")
+				this.log("Sleeping until a new task is received")
 				await new Promise(resolve => this._wakeup = () => {
 					resolve()
 					this._wakeup = null
@@ -33,12 +42,12 @@ class TaskQueue {
 				if (!this.running) {
 					break
 				}
-				console.log("Continuing processing tasks")
+				this.log("Continuing processing tasks")
 			}
 			const { task, resolve, reject } = this._tasks.shift()
 			await task().then(resolve, reject)
 		}
-		console.log("Stopped processing tasks")
+		this.log("Stopped processing tasks")
 	}
 
 	/**
@@ -70,7 +79,7 @@ class TaskQueue {
 			return
 		}
 		this.running = true
-		this._run().catch(err => console.error("Fatal error processing tasks:", err))
+		this._run().catch(err => this.error("Fatal error processing tasks:", err))
 	}
 
 	/**
@@ -86,5 +95,3 @@ class TaskQueue {
 		}
 	}
 }
-
-module.exports = TaskQueue

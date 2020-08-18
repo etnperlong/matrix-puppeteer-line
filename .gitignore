@@ -11,7 +11,7 @@ __pycache__
 /.eggs
 
 node_modules
-/profiles
+profiles
 
 /config.yaml
 /registration.yaml
