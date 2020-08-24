@@ -24,15 +24,23 @@ export default class PuppetAPI {
 	path = "/var/run/mautrix-amp/puppet.sock"
 
 	constructor() {
-		this.server = net.createServer(sock =>
-			new Client(this, sock, ++this.connIDSequence).start())
+		this.server = net.createServer(this.acceptConnection)
 		this.puppets = new Map()
 		this.clients = new Map()
 		this.connIDSequence = 0
+		this.stopped = false
 	}
 
 	log(...text) {
 		console.log("[API]", ...text)
+	}
+
+	acceptConnection = sock => {
+		if (this.stopped) {
+			sock.end()
+		} else {
+			new Client(this, sock, ++this.connIDSequence).start()
+		}
 	}
 
 	async start() {
@@ -52,15 +60,16 @@ export default class PuppetAPI {
 	}
 
 	async stop() {
+		this.stopped = true
+		for (const client of this.clients.values()) {
+			await client.stop("Server is shutting down")
+		}
 		this.log("Stopping server")
 		await promisify(cb => this.server.close(cb))
 		try {
 			await fs.promises.unlink(this.path)
 		} catch (err) {}
 		this.log("Server stopped")
-		for (const client of this.clients.values()) {
-			await client.stop()
-		}
 		for (const puppet of this.puppets.values()) {
 			await puppet.stop()
 		}

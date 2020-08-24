@@ -43,6 +43,14 @@ export default class Client {
 		}
 	}
 
+	error(...text) {
+		if (this.userID) {
+			console.error(`[API/${this.userID}/${this.connID}]`, ...text)
+		} else {
+			console.error(`[API/${this.connID}]`, ...text)
+		}
+	}
+
 	start() {
 		this.log("Received connection", this.connID)
 		emitLines(this.socket)
@@ -53,17 +61,23 @@ export default class Client {
 		setTimeout(() => {
 			if (!this.userID && !this.stopped) {
 				this.log("Didn't receive register request within 3 seconds, terminating")
-				this.stop()
+				this.stop("Register request timeout")
 			}
 		}, 3000)
 	}
 
-	stop() {
+	async stop(error = null) {
 		if (this.stopped) {
 			return
 		}
 		this.stopped = true
-		return promisify(cb => this.socket.end(cb))
+		try {
+			await this._write({ id: --this.notificationID, command: "quit", error })
+			await promisify(cb => this.socket.end(cb))
+		} catch (err) {
+			this.error("Failed to end connection:", err)
+			this.socket.destroy(err)
+		}
 	}
 
 	handleEnd = () => {
@@ -133,7 +147,7 @@ export default class Client {
 			const oldClient = this.manager.clients.get(this.userID)
 			this.manager.clients.set(this.userID, this)
 			this.log("Terminating previous socket", oldClient.connID, "for", this.userID)
-			await oldClient.stop()
+			await oldClient.stop("Socket replaced by new connection")
 		} else {
 			this.manager.clients.set(this.userID, this)
 		}
@@ -170,11 +184,11 @@ export default class Client {
 		if (!this.userID) {
 			if (req.command !== "register") {
 				this.log("First request wasn't a register request, terminating")
-				await this.stop()
+				await this.stop("Invalid first request")
 				return
 			} else if (!req.user_id) {
 				this.log("Register request didn't contain user ID, terminating")
-				await this.stop()
+				await this.stop("Invalid register request")
 				return
 			}
 			handler = this.handleRegister
