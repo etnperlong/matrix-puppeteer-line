@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "chrono-node": "^2.1.7",
-    "puppeteer": "^5.2.1"
+    "puppeteer": "5.1.0"
   },
   "devDependencies": {
     "babel-eslint": "^10.1.0",
