@@ -23,7 +23,7 @@
  */
 window.__chronoParseDate = function (text, ref, option) {}
 /**
- * @param {Set<string>} changes - The hrefs of the chats that changed.
+ * @param {string[]} changes - The hrefs of the chats that changed.
  * @return {Promise<void>}
  */
 window.__mautrixReceiveChanges = function (changes) {}
@@ -171,7 +171,8 @@ class MautrixController {
 	 * @property {string} name - The name of the chat.
 	 * @property {string} lastMsg - The most recent message in the chat.
 	 *                              May be prefixed by sender name.
-	 * @property {string} lastMsgDate - An imprecise date for the most recent message (e.g. "7:16 PM", "Thu" or "Aug 4")
+	 * @property {string} lastMsgDate - An imprecise date for the most recent message
+	 *                                  (e.g. "7:16 PM", "Thu" or "Aug 4")
 	 */
 
 	/**
@@ -251,14 +252,18 @@ class MautrixController {
 			console.debug("Chat list mutation:", change)
 			if (!(change.target instanceof Element)
 				|| change.target.tagName.toLowerCase() === "mws-conversation-list-item-menu") {
+				console.debug("Ignoring chat list mutation:", change.target instanceof Element)
 				continue
 			}
 			const chat = this.parseChatListItem(change.target.closest("mws-conversation-list-item"))
+			console.debug("Changed chat list item:", chat)
 			changedChatIDs.add(chat.id)
 		}
 		if (changedChatIDs.size > 0) {
 			console.debug("Dispatching chat list mutations:", changedChatIDs)
-			window.__mautrixReceiveChanges(Array.from(changedChatIDs))
+			window.__mautrixReceiveChanges(Array.from(changedChatIDs)).then(
+				() => console.debug("Chat list mutations dispatched"),
+				err => console.error("Error dispatching chat list mutations:", err))
 		}
 	}
 
@@ -271,7 +276,13 @@ class MautrixController {
 		if (this.chatListObserver !== null) {
 			this.removeChatListObserver()
 		}
-		this.chatListObserver = new MutationObserver(this._observeChatListMutations)
+		this.chatListObserver = new MutationObserver(mutations => {
+			try {
+				this._observeChatListMutations(mutations)
+			} catch (err) {
+				console.error("Error observing chat list mutations:", err)
+			}
+		})
 		this.chatListObserver.observe(element, { childList: true, subtree: true })
 		console.debug("Started chat list observer")
 	}
