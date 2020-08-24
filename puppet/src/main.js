@@ -16,16 +16,26 @@
 import process from "process"
 import fs from "fs"
 
+import arg from "arg"
+
 import PuppetAPI from "./api.js"
 import MessagesPuppeteer from "./puppet.js"
 
-let path = process.argv[process.argv.length - 1]
-if (!path.endsWith(".json")) {
-	path = "config.json"
-}
-console.log("Reading config from", path)
-const config = JSON.parse(fs.readFileSync(path).toString())
-MessagesPuppeteer.profileDir = config.profile_dir
+const args = arg({
+	"--config": String,
+	"--browser": String,
+	"-c": "--config",
+	"-b": "--browser",
+})
+
+const configPath = args["--config"] || "config.json"
+MessagesPuppeteer.executablePath = args["--browser"] || MessagesPuppeteer.executablePath
+
+console.log("Reading config from", configPath)
+const config = JSON.parse(fs.readFileSync(configPath).toString())
+MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
+MessagesPuppeteer.disableDebug = !!config.disable_debug
+MessagesPuppeteer.url = config.url || MessagesPuppeteer.url
 
 const api = new PuppetAPI(config.listen)
 

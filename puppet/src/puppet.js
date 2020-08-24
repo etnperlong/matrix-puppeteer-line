@@ -24,7 +24,10 @@ import { sleep } from "./util.js"
 
 export default class MessagesPuppeteer {
 	static profileDir = "./profiles"
-	url = "https://messages.google.com/web/"
+	static executablePath = undefined
+	static disableDebug = false
+	static viewport = { width: 1920, height: 1080 }
+	static url = "https://messages.google.com/web/"
 
 	/**
 	 *
@@ -59,9 +62,10 @@ export default class MessagesPuppeteer {
 	async start(debug = false) {
 		this.log("Launching browser")
 		this.browser = await puppeteer.launch({
+			executablePath: MessagesPuppeteer.executablePath,
 			userDataDir: this.profilePath,
-			headless: !debug,
-			defaultViewport: { width: 1920, height: 1080 },
+			headless: MessagesPuppeteer.disableDebug || !debug,
+			defaultViewport: MessagesPuppeteer.viewport,
 		})
 		this.log("Opening new tab")
 		const pages = await this.browser.pages()
@@ -70,8 +74,8 @@ export default class MessagesPuppeteer {
 		} else {
 			this.page = await this.browser.newPage()
 		}
-		this.log("Opening", this.url)
-		await this.page.goto(this.url)
+		this.log("Opening", MessagesPuppeteer.url)
+		await this.page.goto(MessagesPuppeteer.url)
 
 		this.log("Injecting content script")
 		await this.page.addScriptTag({ path: "./src/contentscript.js", type: "module" })
