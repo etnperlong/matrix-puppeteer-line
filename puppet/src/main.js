@@ -24,12 +24,14 @@ import MessagesPuppeteer from "./puppet.js"
 const args = arg({
 	"--config": String,
 	"--browser": String,
+	"--no-sandbox": Boolean,
 	"-c": "--config",
 	"-b": "--browser",
 })
 
 const configPath = args["--config"] || "config.json"
 MessagesPuppeteer.executablePath = args["--browser"] || MessagesPuppeteer.executablePath
+MessagesPuppeteer.noSandbox = args["--no-sandbox"]
 
 console.log("Reading config from", configPath)
 const config = JSON.parse(fs.readFileSync(configPath).toString())

@@ -26,6 +26,7 @@ export default class MessagesPuppeteer {
 	static profileDir = "./profiles"
 	static executablePath = undefined
 	static disableDebug = false
+	static noSandbox = false
 	static viewport = { width: 1920, height: 1080 }
 	static url = "https://messages.google.com/web/"
 
@@ -64,6 +65,7 @@ export default class MessagesPuppeteer {
 		this.browser = await puppeteer.launch({
 			executablePath: MessagesPuppeteer.executablePath,
 			userDataDir: this.profilePath,
+			args: MessagesPuppeteer.noSandbox ? ["--no-sandbox"] : undefined,
 			headless: MessagesPuppeteer.disableDebug || !debug,
 			defaultViewport: MessagesPuppeteer.viewport,
 		})
@@ -133,8 +135,12 @@ export default class MessagesPuppeteer {
 	 */
 	async stop() {
 		this.taskQueue.stop()
-		await this.page.close()
-		await this.browser.close()
+		if (this.page) {
+			await this.page.close()
+		}
+		if (this.browser) {
+			await this.browser.close()
+		}
 		this.log("Everything stopped")
 	}
 
