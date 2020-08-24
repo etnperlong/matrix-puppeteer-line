@@ -115,14 +115,20 @@ export default class Client {
 	}
 
 	handleStart = async (req) => {
-		if (this.puppet !== null) {
-			return { started: false, is_logged_in: await this.puppet.isLoggedIn() }
+		let started = false
+		if (this.puppet === null) {
+			this.log("Opening new puppeteer for", this.userID)
+			this.puppet = new MessagesPuppeteer(this.userID, this)
+			this.manager.puppets.set(this.userID, this.puppet)
+			await this.puppet.start(!!req.debug)
+			started = true
 		}
-		this.log("Opening new puppeteer for", this.userID)
-		this.puppet = new MessagesPuppeteer(this.userID, this)
-		this.manager.puppets.set(this.userID, this.puppet)
-		await this.puppet.start(!!req.debug)
-		return { started: true, is_logged_in: await this.puppet.isLoggedIn() }
+		return {
+			started,
+			is_logged_in: await this.puppet.isLoggedIn(),
+			is_connected: !await this.puppet.isDisconnected(),
+			is_permanently_disconnected: await this.puppet.isPermanentlyDisconnected(),
+		}
 	}
 
 	handleStop = async () => {
@@ -199,6 +205,7 @@ export default class Client {
 				disconnect: () => this.stop(),
 				login: () => this.puppet.waitForLogin(),
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
+				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids),
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
 				get_messages: req => this.puppet.getMessages(req.chat_id),

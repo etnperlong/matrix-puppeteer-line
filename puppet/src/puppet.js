@@ -91,9 +91,11 @@ export default class MessagesPuppeteer {
 		// Wait for the page to load (either QR code for login or chat list when already logged in)
 		await Promise.race([
 			this.page.waitForSelector("mw-main-container mws-conversations-list .conv-container",
-				{ visible: true }),
+				{ visible: true, timeout: 60000 }),
 			this.page.waitForSelector("mw-authentication-container mw-qr-code",
-				{ visible: true }),
+				{ visible: true, timeout: 60000 }),
+			this.page.waitForSelector("mw-unable-to-connect-container",
+				{ visible: true, timeout: 60000 }),
 		])
 		this.taskQueue.start()
 		if (await this.isLoggedIn()) {
@@ -153,6 +155,15 @@ export default class MessagesPuppeteer {
 		return await this.page.$("mw-main-container mws-conversations-list") !== null
 	}
 
+	async isPermanentlyDisconnected() {
+		return await this.page.$("mw-unable-to-connect-container") !== null
+	}
+
+	async isDisconnected() {
+		// TODO we should observe this banner appearing and disappearing to notify about disconnects
+		return await this.page.$("mw-main-container mw-error-banner") !== null
+	}
+
 	/**
 	 * Get the IDs of the most recent chats.
 	 *
@@ -196,7 +207,20 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
 	 */
 	async getMessages(id) {
-		return this.taskQueue.push(() => this._getMessagesUnsafe(id))
+		return this.taskQueue.push(async () => {
+			const messages = await this._getMessagesUnsafe(id)
+			if (messages.length > 0) {
+				this.mostRecentMessages.set(id, messages[messages.length - 1].id)
+			}
+			return messages
+		})
+	}
+
+	setLastMessageIDs(ids) {
+		for (const [chatID, messageID] of Object.entries(ids)) {
+			this.mostRecentMessages.set(+chatID, messageID)
+		}
+		this.log("Updated most recent message ID map:", this.mostRecentMessages)
 	}
 
 	async startObserving() {
@@ -272,7 +296,8 @@ export default class MessagesPuppeteer {
 		const newFirstID = messages[0].id
 		const newLastID = messages[messages.length - 1].id
 		this.mostRecentMessages.set(id, newLastID)
-		this.log(`Loaded messages in ${id} after ${lastMsgID}: got ${newFirstID}-${newLastID}`)
+		const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
+		this.log(`Loaded ${messages.length} messages in ${id} after ${lastMsgID}: got ${range}`)
 
 		if (this.client) {
 			for (const message of messages) {
