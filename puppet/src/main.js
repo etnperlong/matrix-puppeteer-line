@@ -33,7 +33,7 @@ const configPath = args["--config"] || "config.json"
 MessagesPuppeteer.executablePath = args["--browser"] || MessagesPuppeteer.executablePath
 MessagesPuppeteer.noSandbox = args["--no-sandbox"]
 
-console.log("Reading config from", configPath)
+console.log("[Main] Reading config from", configPath)
 const config = JSON.parse(fs.readFileSync(configPath).toString())
 MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
 MessagesPuppeteer.disableDebug = !!config.disable_debug
@@ -42,7 +42,10 @@ MessagesPuppeteer.url = config.url || MessagesPuppeteer.url
 const api = new PuppetAPI(config.listen)
 
 function stop() {
-	api.stop().then(() => process.exit(0), err => {
+	api.stop().then(() => {
+		console.log("[Main] Everything stopped")
+		process.exit(0)
+	}, err => {
 		console.error("[Main] Error stopping:", err)
 		process.exit(3)
 	})

@@ -21,18 +21,17 @@
  * @param {{[forwardDate]: boolean}} [option] - Extra options for parser
  * @return {Promise<Date>}
  */
-window.__chronoParseDate = function (text, ref, option) {
-}
+window.__chronoParseDate = function (text, ref, option) {}
 /**
  * @param {Set<string>} changes - The hrefs of the chats that changed.
+ * @return {Promise<void>}
  */
-window.__mautrixReceiveChanges = function (changes) {
-}
+window.__mautrixReceiveChanges = function (changes) {}
 /**
  * @param {string} url - The URL for the QR code.
+ * @return {Promise<void>}
  */
-window.__mautrixReceiveQR = function (url) {
-}
+window.__mautrixReceiveQR = function (url) {}
 
 class MautrixController {
 	constructor() {
@@ -128,8 +127,10 @@ class MautrixController {
 				messages.push(this._parseMessage(messageDate, child))
 				break
 			case "mws-tombstone-message-wrapper":
-				const dateText = child.querySelector("mws-relative-timestamp")?.innerText
-				messageDate = await this._parseDate(dateText, messageDate) || messageDate
+				messageDate = await this._parseDate(
+					child.querySelector("mws-relative-timestamp")?.innerText,
+					messageDate
+				) || messageDate
 				break
 			}
 		}
@@ -214,8 +215,10 @@ class MautrixController {
 	 * @return {boolean} - Whether or not the image has been downloaded
 	 */
 	imageExists(id) {
-		const imageElement = document.querySelector(`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
-		return !imageElement.classList.contains("not-rendered") && imageElement.getAttribute("src") !== ""
+		const imageElement = document.querySelector(
+			`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
+		return !imageElement.classList.contains("not-rendered")
+			&& imageElement.getAttribute("src") !== ""
 	}
 
 	/**
@@ -226,8 +229,9 @@ class MautrixController {
 	 * @return {Promise<string>} - The data URL (containing the mime type and base64 data)
 	 */
 	async readImage(id) {
-		const imageElement = document.querySelector(`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
-		const resp = await fetch(imageElement.getAttribute(src))
+		const imageElement = document.querySelector(
+			`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
+		const resp = await fetch(imageElement.getAttribute("src"))
 		const reader = new FileReader()
 		const promise = new Promise((resolve, reject) => {
 			reader.onload = () => resolve(reader.result)
