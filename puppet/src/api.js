@@ -21,10 +21,10 @@ import Client from "./client.js"
 import { promisify } from "./util.js"
 
 export default class PuppetAPI {
-	path = "/var/run/mautrix-amp/puppet.sock"
-
-	constructor() {
+	constructor(listenConfig) {
+		this.listenConfig = listenConfig
 		this.server = net.createServer(this.acceptConnection)
+		this.connections = []
 		this.puppets = new Map()
 		this.clients = new Map()
 		this.connIDSequence = 0
@@ -38,25 +38,41 @@ export default class PuppetAPI {
 	acceptConnection = sock => {
 		if (this.stopped) {
 			sock.end()
+			sock.destroy()
 		} else {
-			new Client(this, sock, ++this.connIDSequence).start()
+			const connID = this.connIDSequence++
+			this.connections[connID] = sock
+			new Client(this, sock, connID).start()
 		}
+	}
+
+	async startUnix(socketPath) {
+		try {
+			await fs.promises.access(path.dirname(socketPath))
+		} catch (err) {
+			await fs.promises.mkdir(path.dirname(socketPath), 0o700)
+		}
+		try {
+			await fs.promises.unlink(socketPath)
+		} catch (err) {}
+		await promisify(cb => this.server.listen(socketPath, cb))
+		await fs.promises.chmod(socketPath, 0o700)
+		this.log("Now listening at", socketPath)
+	}
+
+	async startTCP(port, host) {
+		await promisify(cb => this.server.listen(port, host, cb))
+		this.log(`Now listening at ${host || ""}:${port}`)
 	}
 
 	async start() {
 		this.log("Starting server")
 
-		try {
-			await fs.promises.access(path.dirname(this.path))
-		} catch (err) {
-			await fs.promises.mkdir(path.dirname(this.path), 0o700)
+		if (this.listenConfig.type === "unix") {
+			await this.startUnix(this.listenConfig.path)
+		} else if (this.listenConfig.type === "tcp") {
+			await this.startTCP(this.listenConfig.port, this.listenConfig.host)
 		}
-		try {
-			await fs.promises.unlink(this.path)
-		} catch (err) {}
-		await promisify(cb => this.server.listen(this.path, cb))
-		await fs.promises.chmod(this.path, 0o700)
-		this.log("Now listening at", this.path)
 	}
 
 	async stop() {
@@ -64,12 +80,18 @@ export default class PuppetAPI {
 		for (const client of this.clients.values()) {
 			await client.stop("Server is shutting down")
 		}
+		for (const socket of this.connections) {
+			socket.end()
+			socket.destroy()
+		}
 		this.log("Stopping server")
 		await promisify(cb => this.server.close(cb))
-		try {
-			await fs.promises.unlink(this.path)
-		} catch (err) {}
-		this.log("Server stopped")
+		if (this.listenConfig.type === "unix") {
+			try {
+				await fs.promises.unlink(this.listenConfig.path)
+			} catch (err) {}
+		}
+		this.log("Stopping puppets")
 		for (const puppet of this.puppets.values()) {
 			await puppet.stop()
 		}

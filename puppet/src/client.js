@@ -119,7 +119,7 @@ export default class Client {
 			return { started: false, is_logged_in: await this.puppet.isLoggedIn() }
 		}
 		this.log("Opening new puppeteer for", this.userID)
-		this.puppet = new MessagesPuppeteer(this.userID, `./profiles/${this.userID}`, this)
+		this.puppet = new MessagesPuppeteer(this.userID, this)
 		this.manager.puppets.set(this.userID, this.puppet)
 		await this.puppet.start(!!req.debug)
 		return { started: true, is_logged_in: await this.puppet.isLoggedIn() }
@@ -196,6 +196,7 @@ export default class Client {
 			handler = {
 				start: this.handleStart,
 				stop: this.handleStop,
+				disconnect: () => this.stop(),
 				login: () => this.puppet.waitForLogin(),
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
 				get_chats: () => this.puppet.getRecentChats(),

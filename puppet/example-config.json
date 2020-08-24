@@ -1,0 +1,7 @@
+{
+	"listen": {
+		"type": "unix",
+		"path": "/var/run/mautrix-amp/puppet.sock"
+	},
+	"profile_dir": "./profiles"
+}

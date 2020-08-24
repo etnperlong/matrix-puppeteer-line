@@ -23,15 +23,16 @@ import TaskQueue from "./taskqueue.js"
 import { sleep } from "./util.js"
 
 export default class MessagesPuppeteer {
+	static profileDir = "./profiles"
 	url = "https://messages.google.com/web/"
 
 	/**
 	 *
 	 * @param {string} id
-	 * @param {string} profilePath
 	 * @param {?Client} [client]
 	 */
-	constructor(id, profilePath, client = null) {
+	constructor(id, client = null) {
+		let profilePath = path.join(MessagesPuppeteer.profileDir, id)
 		if (!profilePath.startsWith("/")) {
 			profilePath = path.join(process.cwd(), profilePath)
 		}

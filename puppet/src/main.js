@@ -14,10 +14,20 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import process from "process"
+import fs from "fs"
 
 import PuppetAPI from "./api.js"
+import MessagesPuppeteer from "./puppet.js"
 
-const api = new PuppetAPI()
+let path = process.argv[process.argv.length - 1]
+if (!path.endsWith(".json")) {
+	path = "config.json"
+}
+console.log("Reading config from", path)
+const config = JSON.parse(fs.readFileSync(path).toString())
+MessagesPuppeteer.profileDir = config.profile_dir
+
+const api = new PuppetAPI(config.listen)
 
 function stop() {
 	api.stop().then(() => process.exit(0), err => {
