@@ -41,6 +41,7 @@ class Participant(SerializableAttrs['Participant']):
 @dataclass
 class ChatInfo(ChatListInfo, SerializableAttrs['ChatInfo']):
     participants: List[Participant]
+    readonly: bool
 
 
 @dataclass

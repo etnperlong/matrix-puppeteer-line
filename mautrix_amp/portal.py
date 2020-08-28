@@ -341,7 +341,7 @@ class Portal(DBPortal, BasePortal):
         if self.config["bridge.encryption.default"] and self.matrix.e2ee:
             self.encrypted = True
             initial_state.append({
-                "type": "m.room.encryption",
+                "type": str(EventType.ROOM_ENCRYPTION),
                 "content": {"algorithm": "m.megolm.v1.aes-sha2"},
             })
             if self.is_direct:
@@ -353,6 +353,20 @@ class Portal(DBPortal, BasePortal):
                 "type": "m.room.related_groups",
                 "content": {"groups": [self.config["appservice.community_id"]]},
             })
+        initial_state.append({
+            "type": str(EventType.ROOM_POWER_LEVELS),
+            "content": {
+                "users": {
+                    self.az.bot_mxid: 100,
+                    self.main_intent.mxid: 9001,
+                },
+                "events": {},
+                "events_default": 100 if info.readonly else 0,
+                "state_default": 50,
+                "invite": 50,
+                "redact": 0
+            }
+        })
 
         # We lock backfill lock here so any messages that come between the room being created
         # and the initial backfill finishing wouldn't be bridged before the backfill messages.

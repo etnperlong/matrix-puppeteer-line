@@ -181,6 +181,7 @@ export default class MessagesPuppeteer {
 	 * @typedef ChatInfo
 	 * @type object
 	 * @property {[Participant]} participants
+	 * @property {boolean} readonly
 	 */
 
 	/**
@@ -256,6 +257,7 @@ export default class MessagesPuppeteer {
 		await this.page.click("mw-conversation-menu button")
 		await this.page.waitForSelector(".mat-menu-panel button.mat-menu-item.details",
 			{ timeout: 500 })
+		const readonly = await this.page.$("mw-conversation-container .compose-readonly") !== null
 		// There's a 250ms animation and I don't know how to wait for it properly
 		await sleep(250)
 		await this.page.click(".mat-menu-panel button.mat-menu-item.details")
@@ -267,6 +269,7 @@ export default class MessagesPuppeteer {
 		await this.page.click("mws-dialog mat-dialog-actions button.confirm")
 		return {
 			participants,
+			readonly,
 			...await this.page.$eval(this._listItemSelector(id),
 				elem => window.__mautrixController.parseChatListItem(elem)),
 		}
