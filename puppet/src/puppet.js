@@ -43,6 +43,7 @@ export default class MessagesPuppeteer {
 		this.id = id
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
+		this.sentMessageIDs = new Set()
 		this.mostRecentMessages = new Map()
 		this.taskQueue = new TaskQueue(this.id)
 		this.client = client
@@ -83,6 +84,8 @@ export default class MessagesPuppeteer {
 		await this.page.addScriptTag({ path: "./src/contentscript.js", type: "module" })
 		this.log("Exposing functions")
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
+		await this.page.exposeFunction("__mautrixReceiveMessageID",
+				id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
@@ -195,9 +198,10 @@ export default class MessagesPuppeteer {
 	 *
 	 * @param {number} chatID - The ID of the chat to send a message to.
 	 * @param {string} text   - The text to send.
+	 * @return {Promise<{id: number}>} - The ID of the sent message.
 	 */
 	async sendMessage(chatID, text) {
-		await this.taskQueue.push(() => this._sendMessageUnsafe(chatID, text))
+		return { id: await this.taskQueue.push(() => this._sendMessageUnsafe(chatID, text)) }
 	}
 
 	/**
@@ -273,6 +277,10 @@ export default class MessagesPuppeteer {
 		await this.page.focus("mws-message-compose .input-box textarea")
 		await this.page.keyboard.type(text)
 		await this.page.click(".compose-container > mws-message-send-button > button")
+		const id = await this.page.$eval("mws-message-wrapper.outgoing[msg-id^='tmp_']",
+			elem => window.__mautrixController.waitForMessage(elem))
+		this.log("Successfully sent message", id, "to", chatID)
+		return id
 	}
 
 	async _getMessagesUnsafe(id, minID = 0) {
@@ -281,10 +289,7 @@ export default class MessagesPuppeteer {
 		await this.page.waitFor("mws-message-wrapper")
 		const messages = await this.page.$eval("mws-messages-list .content",
 			element => window.__mautrixController.parseMessageList(element))
-		if (minID) {
-			return messages.filter(message => message.id > minID)
-		}
-		return messages
+		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
 	}
 
 	async _processChatListChangeUnsafe(id) {

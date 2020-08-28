@@ -49,16 +49,16 @@ class Client(RPCClient):
         resp = await self.request("get_messages", chat_id=chat_id)
         return [Message.deserialize(data) for data in resp]
 
-    async def send(self, chat_id: int, text: str) -> None:
-        await self.request("send", chat_id=chat_id, text=text)
+    async def send(self, chat_id: int, text: str) -> int:
+        resp = await self.request("send", chat_id=chat_id, text=text)
+        return resp["id"]
 
     async def set_last_message_ids(self, msg_ids: Dict[int, int]) -> None:
         await self.request("set_last_message_ids", msg_ids=msg_ids)
 
     async def on_message(self, func: Callable[[Message], Awaitable[None]]) -> None:
         async def wrapper(data: Dict[str, Any]) -> None:
-            print("Received", data)
-            await func(Message.deserialize(data))
+            await func(Message.deserialize(data["message"]))
 
         self.add_event_handler("message", wrapper)
 

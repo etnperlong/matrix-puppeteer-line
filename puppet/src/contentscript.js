@@ -32,6 +32,11 @@ window.__mautrixReceiveChanges = function (changes) {}
  * @return {Promise<void>}
  */
 window.__mautrixReceiveQR = function (url) {}
+/**
+ * @param {number} id - The ID of the message that was sent
+ * @return {Promise<void>}
+ */
+window.__mautrixReceiveMessageID = function(id) {}
 
 class MautrixController {
 	constructor() {
@@ -112,6 +117,32 @@ class MautrixController {
 		return messageData
 	}
 
+	waitForMessage(elem) {
+		return new Promise(resolve => {
+			let msgID = null
+			const observer = new MutationObserver(changes => {
+				for (const change of changes) {
+					if (change.type === "attributes" && change.attributeName === "msg-id") {
+						msgID = +elem.getAttribute("msg-id")
+						window.__mautrixReceiveMessageID(msgID)
+					} else if (change.type === "childList"
+						&& change.target.nodeName.toLowerCase() === "mws-relative-timestamp"
+						&& change.addedNodes.length > 0
+						&& change.addedNodes[0] instanceof Text) {
+						resolve(msgID)
+						observer.disconnect()
+						return
+					}
+				}
+			})
+			observer.observe(elem, { attributes: true, attributeFilter: ["msg-id"] })
+			observer.observe(elem.querySelector("mws-message-status"), {
+				childList: true,
+				subtree: true,
+			})
+		})
+	}
+
 	/**
 	 * Parse a message list in the given element. The element should probably be the .content div
 	 * inside a mws-message-list element.
@@ -125,7 +156,9 @@ class MautrixController {
 		for (const child of element.children) {
 			switch (child.tagName.toLowerCase()) {
 			case "mws-message-wrapper":
-				messages.push(this._parseMessage(messageDate, child))
+				if (!child.getAttribute("msg-id").startsWith("tmp_")) {
+					messages.push(this._parseMessage(messageDate, child))
+				}
 				break
 			case "mws-tombstone-message-wrapper":
 				messageDate = await this._parseDate(

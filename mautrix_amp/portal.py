@@ -125,11 +125,9 @@ class Portal(DBPortal, BasePortal):
             # mime_type = message.info.mimetype or magic.from_buffer(data, mime=True)
             # TODO media
             return
-        await sender.client.send(self.chat_id, text)
-        message_id = 0
-        # TODO figure out the message ID and store it
-        # msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id)
-        # await msg.insert()
+        message_id = await sender.client.send(self.chat_id, text)
+        msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
+        await msg.insert()
         await self._send_delivery_receipt(event_id)
         self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
 
@@ -155,7 +153,10 @@ class Portal(DBPortal, BasePortal):
             self.log.warning(f"Ignoring message {evt.id}: group chats aren't supported yet")
             return
 
-        # TODO deduplication of outgoing messages
+        if await DBMessage.get_by_mid(evt.id):
+            self.log.debug(f"Ignoring duplicate message {evt.id}")
+            return
+
         event_id = None
         if evt.image:
             content = await self._handle_remote_photo(source, intent, evt)
@@ -238,8 +239,8 @@ class Portal(DBPortal, BasePortal):
             if user_id == self.az.bot_mxid:
                 continue
             mid = p.Puppet.get_id_from_mxid(user_id)
-            print(mid)
             if mid and mid not in current_members:
+                print(mid)
                 await self.main_intent.kick_user(self.mxid, user_id,
                                                  reason="User had left this chat")
 
@@ -298,12 +299,15 @@ class Portal(DBPortal, BasePortal):
         except Exception:
             self.log.warning("Failed to update bridge info", exc_info=True)
 
+    async def update_matrix_room(self, source: 'u.User', info: ChatInfo) -> Optional[RoomID]:
+        try:
+            await self._update_matrix_room(source, info)
+        except Exception:
+            self.log.exception("Failed to update portal")
+
     async def create_matrix_room(self, source: 'u.User', info: ChatInfo) -> Optional[RoomID]:
         if self.mxid:
-            try:
-                await self._update_matrix_room(source, info)
-            except Exception:
-                self.log.exception("Failed to update portal")
+            await self.update_matrix_room(source, info)
             return self.mxid
         async with self._create_room_lock:
             return await self._create_matrix_room(source, info)

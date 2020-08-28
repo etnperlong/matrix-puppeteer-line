@@ -105,7 +105,11 @@ class User(DBUser, BaseUser):
             portal = await po.Portal.get_by_chat_id(chat.id, create=True)
             if portal.mxid or index < limit:
                 chat = await self.client.get_chat(chat.id)
-                await portal.create_matrix_room(self, chat)
+                if portal.mxid:
+                    await portal.update_matrix_room(self, chat)
+                    await portal.backfill(self)
+                else:
+                    await portal.create_matrix_room(self, chat)
 
     async def stop(self) -> None:
         if self.client:
