@@ -5,7 +5,3 @@
 python-olm>=3,<4
 pycryptodome>=3,<4
 unpaddedbase64>=1,<2
-
-#/login
-pillow>=4,<8
-qrcode>=6,<7
