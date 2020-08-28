@@ -212,6 +212,9 @@ export default class MessagesPuppeteer {
 			if (messages.length > 0) {
 				this.mostRecentMessages.set(id, messages[messages.length - 1].id)
 			}
+			for (const message of messages) {
+				message.chat_id = id
+			}
 			return messages
 		})
 	}

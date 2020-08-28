@@ -12,14 +12,14 @@ homeserver:
 # Changing these values requires regeneration of the registration.
 appservice:
     # The address that the homeserver can use to connect to this appservice.
-    address: http://localhost:29327
+    address: http://localhost:29394
     # When using https:// the TLS certificate and key files for the address.
     tls_cert: false
     tls_key: false
 
     # The hostname and port where this appservice should listen.
     hostname: 0.0.0.0
-    port: 29327
+    port: 29394
     # The maximum body size of appservice API requests (from the homeserver) in mebibytes
     # Usually 1 is enough, but on high-traffic bridges you might need to increase this to avoid 413s
     max_body_size: 1
@@ -73,9 +73,6 @@ bridge:
     # Number of conversations to sync (and create portals for) on login.
     # Set 0 to disable automatic syncing.
     initial_conversation_sync: 10
-    # Whether or not to use /sync to get read receipts when using your own Matrix account as the
-    # Matrix puppet for messages sent from the Messages android app.
-    sync_with_custom_puppets: true
     # Shared secret for https://github.com/devture/matrix-synapse-shared-secret-auth
     #
     # If set, custom puppets will be enabled automatically for local users
@@ -87,15 +84,6 @@ bridge:
     federate_rooms: true
     # Settings for backfilling messages from the Messages app.
     backfill:
-        # Whether or not the default puppets of logged in Matrix users should be
-        # invited to private chats when backfilling history from the Messages app. This is
-        # usually needed to prevent rate limits and to allow timestamp massaging.
-        invite_own_puppet: true
-        # Maximum number of messages to backfill initially.
-        # Set to 0 to disable backfilling when creating portal.
-        initial_limit: 0
-        missed
-        missed_limit: 0
         # If using double puppeting, should notifications be disabled
         # while the initial backfill is in progress?
         disable_notifications: false
@@ -138,18 +126,18 @@ bridge:
     # The prefix for commands. Only required in non-management rooms.
     command_prefix: "!am"
 
-    # Permissions for using the bridge.
-    # Permitted values:
-    #       user - Use the bridge with puppeting.
-    #      admin - Use and administrate the bridge.
-    # Permitted keys:
-    #        * - All Matrix users
-    #   domain - All users on that homeserver
-    #     mxid - Specific user
-    permissions:
-        "example.com": "user"
-        "@admin:example.com": "admin"
+    # This bridge only supports a single user
+    user: "@admin:example.com"
 
+puppeteer:
+    connection:
+        # Either unix or tcp
+        type: unix
+        # Only for type: unix
+        path: /var/run/mautrix-amp/puppet.sock
+        # Only for type: tcp
+        host: localhost
+        port: 29395
 
 # Python logging configuration.
 #

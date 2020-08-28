@@ -99,6 +99,7 @@ export default class Client {
 	}
 
 	sendMessage(message) {
+		this.log("Sending", message, "to client")
 		return this._write({
 			id: --this.notificationID,
 			command: "message",
@@ -107,6 +108,7 @@ export default class Client {
 	}
 
 	sendQRCode(url) {
+		this.log("Sending QR", url, "to client")
 		return this._write({
 			id: --this.notificationID,
 			command: "qr",

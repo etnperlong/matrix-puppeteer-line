@@ -43,11 +43,13 @@ class MautrixController {
 	 * Parse a date string.
 	 *
 	 * @param {string} text - The string to parse
+	 * @param {Date} [ref] - Reference date to parse relative times
+	 * @param {{[forwardDate]: boolean}} [option] - Extra options for parser
 	 * @return {Promise<null|Date>} - The date, or null if parsing failed.
 	 * @private
 	 */
-	async _tryParseDate(text) {
-		const parsed = await window.__chronoParseDate(text)
+	async _tryParseDate(text, ref, option) {
+		const parsed = await window.__chronoParseDate(text, ref, option)
 		if (parsed) {
 			return new Date(parsed)
 		}
@@ -57,12 +59,11 @@ class MautrixController {
 	/**
 	 * Parse a date separator (mws-relative-timestamp)
 	 *
-	 * @param {string} text          - The text in the mws-relative-timestamp element.
-	 * @param {Date}   [messageDate] - The previous date separator value.
+	 * @param {string} text - The text in the mws-relative-timestamp element.
 	 * @return {?Date} - The value in the date separator.
 	 * @private
 	 */
-	async _parseDate(text, messageDate) {
+	async _parseDate(text) {
 		if (!text) {
 			return null
 		}
@@ -129,7 +130,6 @@ class MautrixController {
 			case "mws-tombstone-message-wrapper":
 				messageDate = await this._parseDate(
 					child.querySelector("mws-relative-timestamp")?.innerText,
-					messageDate
 				) || messageDate
 				break
 			}
@@ -159,6 +159,9 @@ class MautrixController {
 			if (nameElem.nextElementSibling && nameElem.nextElementSibling.hasAttribute("data-e2e-details-participant-number")) {
 				id = nameElem.nextElementSibling.innerText
 			}
+			// For phone numbers, remove the + prefix
+			// For non-number IDs, prepend name_ and force-lowercase
+			id = /^\+\d+$/.test(id) ? id.substr(1) : `name_${id.toLowerCase()}`
 			participants.push({ name, id })
 		}
 		return participants
