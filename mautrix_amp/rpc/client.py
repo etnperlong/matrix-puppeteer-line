@@ -81,7 +81,8 @@ class Client(RPCClient):
         try:
             while True:
                 await event.wait()
-                while item := data.popleft():
+                while len(data) > 0:
+                    item = data.popleft()
                     if item is None:
                         return
                     yield item
