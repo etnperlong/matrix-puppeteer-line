@@ -2,21 +2,19 @@
 
 * Matrix → Android Messages
   * [ ] Message content
-    * [ ] Text
+    * [x] Text
     * [ ] Media
 * Android Messages → Matrix
   * [ ] Message content
-    * [ ] Text
+    * [x] Text
     * [ ] Media
-  * [ ] Message history
-    * [ ] When creating portal
-    * [ ] Missed messages
+  * [x] Message history
+    * [x] When creating portal
+    * [x] Missed messages
 * Misc
   * [ ] Automatic portal creation
-    * [ ] At startup
+    * [x] At startup
     * [ ] When receiving invite or message
   * [ ] Provisioning API for logging in
-  * [ ] Option to use own Matrix account for messages sent from Android Messages app
-    * [ ] Automatic login with shared secret
-    * [ ] Manual login with `login-matrix`
-  * [ ] E2EE in Matrix rooms
+  * [x] Use own Matrix account for messages sent from Android Messages app
+  * [x] E2EE in Matrix rooms
