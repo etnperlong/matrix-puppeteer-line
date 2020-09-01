@@ -25,7 +25,7 @@ async def set_notice_room(evt: CommandEvent) -> None:
 
 
 @command_handler(needs_auth=False, management_only=True, help_section=SECTION_CONNECTION,
-                 help_text="Check if you're logged into Twitter")
+                 help_text="Check if you're logged into Android Messages")
 async def ping(evt: CommandEvent) -> None:
     status = await evt.sender.client.start()
     if status.is_logged_in:
