@@ -48,7 +48,7 @@ setuptools.setup(
 
     install_requires=install_requires,
     extras_require=extras_require,
-    python_requires="~=3.6",
+    python_requires="~=3.7",
 
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
@@ -60,11 +60,10 @@ setuptools.setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
     ],
-    entry_points="""
-        [console_scripts]
-        mautrix-amp=mautrix_amp.__main__:main
-    """,
     package_data={"mautrix_amp": [
         "example-config.yaml",
     ]},
+    data_files=[
+        (".", ["mautrix_amp/example-config.yaml"]),
+    ],
 )
