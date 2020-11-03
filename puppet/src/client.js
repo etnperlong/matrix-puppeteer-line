@@ -211,6 +211,7 @@ export default class Client {
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
 				get_messages: req => this.puppet.getMessages(req.chat_id),
+				is_connected: async () => ({ is_connected: !await this.puppet.isDisconnected() }),
 			}[req.command] || this.handleUnknownCommand
 		}
 		const resp = { id: req.id }

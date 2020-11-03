@@ -51,6 +51,9 @@ class Config(BaseBridgeConfig):
 
         copy("appservice.community_id")
 
+        copy("metrics.enabled")
+        copy("metrics.listen_port")
+
         copy("bridge.username_template")
         copy("bridge.displayname_template")
 

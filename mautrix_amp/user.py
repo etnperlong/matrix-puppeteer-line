@@ -13,12 +13,14 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Dict, List, Optional, AsyncGenerator, TYPE_CHECKING, cast
+from typing import Dict, List, Optional, TYPE_CHECKING, cast
+from collections import defaultdict
 import asyncio
 
 from mautrix.bridge import BaseUser
 from mautrix.types import UserID, RoomID
 from mautrix.appservice import AppService, IntentAPI
+from mautrix.util.opt_prometheus import Gauge
 
 from .db import User as DBUser, Portal as DBPortal, Message as DBMessage
 from .config import Config
@@ -27,6 +29,8 @@ from . import puppet as pu, portal as po
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
+
+METRIC_CONNECTED = Gauge("bridge_connected", "Users connected to Android Messages")
 
 
 class User(DBUser, BaseUser):
@@ -40,12 +44,15 @@ class User(DBUser, BaseUser):
     is_real_user = True
 
     _notice_room_lock: asyncio.Lock
+    _connection_check_task: Optional[asyncio.Task]
 
     def __init__(self, mxid: UserID, notice_room: Optional[RoomID] = None) -> None:
         super().__init__(mxid=mxid, notice_room=notice_room)
         self._notice_room_lock = asyncio.Lock()
         self.is_whitelisted = self.is_admin = self.config["bridge.user"] == mxid
         self.log = self.log.getChild(self.mxid)
+        self._metric_value = defaultdict(lambda: False)
+        self._connection_check_task = None
         self.client = None
         self.username = None
         self.intent = None
@@ -87,6 +94,8 @@ class User(DBUser, BaseUser):
         self.log.debug("Starting client")
         state = await self.client.start()
         await self.client.on_message(self.handle_message)
+        if state.is_connected:
+            self._track_metric(METRIC_CONNECTED, True)
         if state.is_logged_in:
             self.loop.create_task(self._try_sync())
 
@@ -96,7 +105,15 @@ class User(DBUser, BaseUser):
         except Exception:
             self.log.exception("Exception while syncing")
 
+    async def _check_connection_loop(self) -> None:
+        while True:
+            self._track_metric(METRIC_CONNECTED, await self.client.is_connected())
+            await asyncio.sleep(5)
+
     async def sync(self) -> None:
+        if self._connection_check_task:
+            self._connection_check_task.cancel()
+        self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.set_last_message_ids(await DBMessage.get_max_mids())
         self.log.info("Syncing chats")
         chats = await self.client.get_chats()
@@ -112,6 +129,9 @@ class User(DBUser, BaseUser):
                     await portal.create_matrix_room(self, chat)
 
     async def stop(self) -> None:
+        if self._connection_check_task:
+            self._connection_check_task.cancel()
+            self._connection_check_task = None
         if self.client:
             await self.client.stop()
 

@@ -19,22 +19,20 @@ from mautrix.bridge import BaseMatrixHandler
 from mautrix.types import (Event, ReactionEvent, MessageEvent, StateEvent, EncryptedEvent, RoomID,
                            RedactionEvent)
 
-from . import commands as com, puppet as pu, user as u
+from . import puppet as pu, user as u
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
 
 
 class MatrixHandler(BaseMatrixHandler):
-    commands: 'com.CommandProcessor'
-
     def __init__(self, bridge: 'MessagesBridge') -> None:
         prefix, suffix = bridge.config["bridge.username_template"].format(userid=":").split(":")
         homeserver = bridge.config["homeserver.domain"]
         self.user_id_prefix = f"@{prefix}"
         self.user_id_suffix = f"{suffix}:{homeserver}"
 
-        super().__init__(command_processor=com.CommandProcessor(bridge), bridge=bridge)
+        super().__init__(bridge=bridge)
 
     def filter_matrix_event(self, evt: Event) -> bool:
         if not isinstance(evt, (ReactionEvent, MessageEvent, StateEvent, EncryptedEvent,

@@ -20,8 +20,11 @@ import qrcode
 import PIL as _
 
 from mautrix.types import MediaMessageEventContent, MessageType, ImageInfo, EventID
+from mautrix.bridge.commands import HelpSection, command_handler
 
-from . import command_handler, CommandEvent, SECTION_CONNECTION, SECTION_AUTH
+from .typehint import CommandEvent
+
+SECTION_AUTH = HelpSection("Authentication", 10, "")
 
 
 @command_handler(needs_auth=False, management_only=True, help_section=SECTION_AUTH,

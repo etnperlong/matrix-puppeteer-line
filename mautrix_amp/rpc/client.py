@@ -49,6 +49,10 @@ class Client(RPCClient):
         resp = await self.request("get_messages", chat_id=chat_id)
         return [Message.deserialize(data) for data in resp]
 
+    async def is_connected(self) -> bool:
+        resp = await self.request("is_connected")
+        return resp["is_connected"]
+
     async def send(self, chat_id: int, text: str) -> int:
         resp = await self.request("send", chat_id=chat_id, text=text)
         return resp["id"]

@@ -85,7 +85,7 @@ export default class MessagesPuppeteer {
 		this.log("Exposing functions")
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveMessageID",
-				id => this.sentMessageIDs.add(id))
+			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
@@ -162,9 +162,28 @@ export default class MessagesPuppeteer {
 		return await this.page.$("mw-unable-to-connect-container") !== null
 	}
 
+	async isOpenSomewhereElse() {
+		try {
+			const text = await this.page.$eval("mws-dialog mat-dialog-content div",
+				elem => elem.textContent)
+			return text?.trim() === "Messages for web is open in more than one tab or browser"
+		} catch (err) {
+			return false
+		}
+	}
+
+	async clickDialogButton() {
+		await this.page.click("mws-dialog mat-dialog-actions button")
+	}
+
 	async isDisconnected() {
-		// TODO we should observe this banner appearing and disappearing to notify about disconnects
-		return await this.page.$("mw-main-container mw-error-banner") !== null
+		const offlineIndicators = await Promise.all([
+			this.page.$("mw-main-nav mw-banner mw-error-banner"),
+			this.page.$("mw-main-nav mw-banner mw-information-banner[title='Connecting']"),
+			this.page.$("mw-unable-to-connect-container"),
+			this.isOpenSomewhereElse(),
+		])
+		return offlineIndicators.some(indicator => Boolean(indicator))
 	}
 
 	/**
