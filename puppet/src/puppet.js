@@ -177,6 +177,9 @@ export default class MessagesPuppeteer {
 	}
 
 	async isDisconnected() {
+		if (!await this.isLoggedIn()) {
+			return true
+		}
 		const offlineIndicators = await Promise.all([
 			this.page.$("mw-main-nav mw-banner mw-error-banner"),
 			this.page.$("mw-main-nav mw-banner mw-information-banner[title='Connecting']"),
