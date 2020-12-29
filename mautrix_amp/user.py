@@ -54,7 +54,6 @@ class User(DBUser, BaseUser):
         self._metric_value = defaultdict(lambda: False)
         self._connection_check_task = None
         self.client = None
-        self.username = None
         self.intent = None
 
     @classmethod

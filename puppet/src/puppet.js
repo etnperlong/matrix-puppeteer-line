@@ -115,8 +115,12 @@ export default class MessagesPuppeteer {
 			return
 		}
 		const qrSelector = "mw-authentication-container mw-qr-code"
-		this.log("Clicking Remember Me button")
-		await this.page.click("mat-slide-toggle:not(.mat-checked) > label")
+		if (!await this.page.$("mat-slide-toggle.mat-checked")) {
+			this.log("Clicking Remember Me button")
+			await this.page.click("mat-slide-toggle:not(.mat-checked) > label")
+		} else {
+			this.log("Remember Me button already clicked")
+		}
 		this.log("Fetching current QR code")
 		const currentQR = await this.page.$eval(qrSelector,
 			element => element.getAttribute("data-qr-code"))
