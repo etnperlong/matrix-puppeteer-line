@@ -28,7 +28,7 @@ export default class MessagesPuppeteer {
 	static disableDebug = false
 	static noSandbox = false
 	static viewport = { width: 1920, height: 1080 }
-	static url = "https://messages.google.com/web/"
+	static url = undefined
 
 	/**
 	 *
@@ -63,11 +63,18 @@ export default class MessagesPuppeteer {
 	 */
 	async start(debug = false) {
 		this.log("Launching browser")
+
+		const pathToExtension = require('path').join(__dirname, 'extension_files');
+		const extensionArgs = [
+			`--disable-extensions-except=${pathToExtension}`,
+			`--load-extension=${pathToExtension}`
+		];
+
 		this.browser = await puppeteer.launch({
 			executablePath: MessagesPuppeteer.executablePath,
 			userDataDir: this.profilePath,
-			args: MessagesPuppeteer.noSandbox ? ["--no-sandbox"] : undefined,
-			headless: MessagesPuppeteer.disableDebug || !debug,
+			args: MessagesPuppeteer.noSandbox ? extensionArgs.concat("--no-sandbox") : extensionArgs,
+			headless: false, // Needed to load extensions
 			defaultViewport: MessagesPuppeteer.viewport,
 		})
 		this.log("Opening new tab")
