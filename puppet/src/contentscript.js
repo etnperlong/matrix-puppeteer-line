@@ -33,6 +33,20 @@ window.__mautrixReceiveChanges = function (changes) {}
  */
 window.__mautrixReceiveQR = function (url) {}
 /**
+ * @return {Promise<void>}
+ */
+window.__mautrixSendEmailCredentials = function () {}
+/**
+ * @param {string} pin - The login PIN.
+ * @return {Promise<void>}
+ */
+window.__mautrixReceivePIN = function (pin) {}
+/**
+ * @param {Element} button - The button to click when a QR code or PIN expires.
+ * @return {Promise<void>}
+ */
+window.__mautrixExpiry = function (button) {}
+/**
  * @param {number} id - The ID of the message that was sent
  * @return {Promise<void>}
  */
@@ -41,7 +55,11 @@ window.__mautrixReceiveMessageID = function(id) {}
 class MautrixController {
 	constructor() {
 		this.chatListObserver = null
-		this.qrCodeObserver = null
+		this.qrChangeObserver = null
+		this.qrAppearObserver = null
+		this.emailAppearObserver = null
+		this.pinAppearObserver = null
+		this.expiryObserver = null
 	}
 
 	/**
@@ -312,6 +330,7 @@ class MautrixController {
 		if (this.chatListObserver !== null) {
 			this.removeChatListObserver()
 		}
+		/* TODO
 		this.chatListObserver = new MutationObserver(mutations => {
 			try {
 				this._observeChatListMutations(mutations)
@@ -320,6 +339,7 @@ class MautrixController {
 			}
 		})
 		this.chatListObserver.observe(element, { childList: true, subtree: true })
+		*/
 		console.debug("Started chat list observer")
 	}
 
@@ -334,27 +354,132 @@ class MautrixController {
 		}
 	}
 
-	addQRObserver(element) {
-		if (this.qrCodeObserver !== null) {
-			this.removeQRObserver()
+	addQRChangeObserver(element) {
+		if (this.qrChangeObserver !== null) {
+			this.removeQRChangeObserver()
 		}
-		this.qrCodeObserver = new MutationObserver(changes => {
+		this.qrChangeObserver = new MutationObserver(changes => {
 			for (const change of changes) {
-				if (change.attributeName === "data-qr-code" && change.target instanceof Element) {
-					window.__mautrixReceiveQR(change.target.getAttribute("data-qr-code"))
+				if (change.attributeName === "title" && change.target instanceof Element) {
+					window.__mautrixReceiveQR(change.target.getAttribute("title"))
 				}
 			}
 		})
-		this.qrCodeObserver.observe(element, {
+		this.qrChangeObserver.observe(element, {
 			attributes: true,
-			attributeFilter: ["data-qr-code"],
+			attributeFilter: ["title"],
 		})
 	}
 
-	removeQRObserver() {
-		if (this.qrCodeObserver !== null) {
-			this.qrCodeObserver.disconnect()
-			this.qrCodeObserver = null
+	removeQRChangeObserver() {
+		if (this.qrChangeObserver !== null) {
+			this.qrChangeObserver.disconnect()
+			this.qrChangeObserver = null
+		}
+	}
+
+	addQRAppearObserver(element) {
+		if (this.qrAppearObserver !== null) {
+			this.removeQRAppearObserver()
+		}
+		this.qrAppearObserver = new MutationObserver(changes => {
+			for (const change of changes) {
+				for (const node of change.addedNodes) {
+					const qrElement = node.querySelector("#login_qrcode_area div[title]")
+					if (qrElement) {
+						window.__mautrixReceiveQR(qrElement.title)
+						window.__mautrixController.addQRChangeObserver(element)
+						return
+					}
+				}
+			}
+		})
+		this.qrAppearObserver.observe(element, {
+			childList: true,
+		})
+	}
+
+	removeQRAppearObserver() {
+		if (this.qrAppearObserver !== null) {
+			this.qrAppearObserver.disconnect()
+			this.qrAppearObserver = null
+		}
+	}
+
+	addEmailAppearObserver(element, login_type) {
+		if (this.emailAppearObserver !== null) {
+			this.removeEmailAppearObserver()
+		}
+		this.emailAppearObserver = new MutationObserver(changes => {
+			for (const change of changes) {
+				for (const node of change.addedNodes) {
+					const emailElement = node.querySelector("#login_email_btn")
+					if (emailElement) {
+						window.__mautrixSendEmailCredentials()
+						return
+					}
+				}
+			}
+		})
+		this.emailAppearObserver.observe(element, {
+			childList: true,
+		})
+	}
+
+	removeEmailAppearObserver() {
+		if (this.emailAppearObserver !== null) {
+			this.emailAppearObserver.disconnect()
+			this.emailAppearObserver = null
+		}
+	}
+
+	addPINAppearObserver(element, login_type) {
+		if (this.pinAppearObserver !== null) {
+			this.removePINAppearObserver()
+		}
+		this.pinAppearObserver = new MutationObserver(changes => {
+			for (const change of changes) {
+				for (const node of change.addedNodes) {
+					const pinElement = node.querySelector("div.mdCMN01Code")
+					if (pinElement) {
+						window.__mautrixReceivePIN(pinElement.innerText)
+						return
+					}
+				}
+			}
+		})
+		this.pinAppearObserver.observe(element, {
+			childList: true,
+		})
+	}
+
+	removePINAppearObserver() {
+		if (this.pinAppearObserver !== null) {
+			this.pinAppearObserver.disconnect()
+			this.pinAppearObserver = null
+		}
+	}
+
+	addExpiryObserver(element) {
+		if (this.expiryObserver !== null) {
+			this.removeExpiryObserver()
+		}
+		const button = element.querySelector("dialog button")
+		this.expiryObserver = new MutationObserver(changes => {
+			if (changes.length == 1 && !changes[0].target.getAttribute("class").includes("MdNonDisp")) {
+				window.__mautrixExpiry(button)
+			}
+		})
+		this.expiryObserver.observe(element, {
+			attributes: true,
+			attributeFilter: ["class"],
+		})
+	}
+
+	removeExpiryObserver() {
+		if (this.expiryObserver !== null) {
+			this.expiryObserver.disconnect()
+			this.expiryObserver = null
 		}
 	}
 }

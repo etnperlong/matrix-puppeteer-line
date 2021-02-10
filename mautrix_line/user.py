@@ -30,7 +30,7 @@ from . import puppet as pu, portal as po
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
 
-METRIC_CONNECTED = Gauge("bridge_connected", "Users connected to Android Messages")
+METRIC_CONNECTED = Gauge("bridge_connected", "Users connected to LINE")
 
 
 class User(DBUser, BaseUser):
@@ -49,6 +49,7 @@ class User(DBUser, BaseUser):
     def __init__(self, mxid: UserID, notice_room: Optional[RoomID] = None) -> None:
         super().__init__(mxid=mxid, notice_room=notice_room)
         self._notice_room_lock = asyncio.Lock()
+        self.command_status = None
         self.is_whitelisted = self.is_admin = self.config["bridge.user"] == mxid
         self.log = self.log.getChild(self.mxid)
         self._metric_value = defaultdict(lambda: False)

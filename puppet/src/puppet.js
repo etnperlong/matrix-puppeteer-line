@@ -27,8 +27,9 @@ export default class MessagesPuppeteer {
 	static executablePath = undefined
 	static disableDebug = false
 	static noSandbox = false
-	static viewport = { width: 1920, height: 1080 }
+	//static viewport = { width: 1920, height: 1080 }
 	static url = undefined
+	static extensionDir = 'extension_files'
 
 	/**
 	 *
@@ -61,14 +62,13 @@ export default class MessagesPuppeteer {
 	 * Start the browser and open the messages for web page.
 	 * This must be called before doing anything else.
 	 */
-	async start(debug = false) {
+	async start() {
 		this.log("Launching browser")
 
-		const pathToExtension = require('path').join(__dirname, 'extension_files');
 		const extensionArgs = [
-			`--disable-extensions-except=${pathToExtension}`,
-			`--load-extension=${pathToExtension}`
-		];
+			`--disable-extensions-except=${MessagesPuppeteer.extensionDir}`,
+			`--load-extension=${MessagesPuppeteer.extensionDir}`
+		]
 
 		this.browser = await puppeteer.launch({
 			executablePath: MessagesPuppeteer.executablePath,
@@ -85,65 +85,180 @@ export default class MessagesPuppeteer {
 			this.page = await this.browser.newPage()
 		}
 		this.log("Opening", MessagesPuppeteer.url)
-		await this.page.goto(MessagesPuppeteer.url)
+		await this.page.setBypassCSP(true) // Needed to load content scripts
+		await this._preparePage(true)
 
-		this.log("Injecting content script")
-		await this.page.addScriptTag({ path: "./src/contentscript.js", type: "module" })
 		this.log("Exposing functions")
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
+		await this.page.exposeFunction("__mautrixSendEmailCredentials", this._sendEmailCredentials.bind(this))
+		await this.page.exposeFunction("__mautrixReceivePIN", this._receivePIN.bind(this))
+		await this.page.exposeFunction("__mautrixExpiry", this._receiveExpiry.bind(this))
+		/* TODO
 		await this.page.exposeFunction("__mautrixReceiveMessageID",
 			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
+		*/
 
-		this.log("Waiting for load")
-		// Wait for the page to load (either QR code for login or chat list when already logged in)
-		await Promise.race([
-			this.page.waitForSelector("mw-main-container mws-conversations-list .conv-container",
-				{ visible: true, timeout: 60000 }),
-			this.page.waitForSelector("mw-authentication-container mw-qr-code",
-				{ visible: true, timeout: 60000 }),
-			this.page.waitForSelector("mw-unable-to-connect-container",
-				{ visible: true, timeout: 60000 }),
-		])
+		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
+		this.loginRunning = false
+		this.loginCancelled = false
 		this.taskQueue.start()
-		if (await this.isLoggedIn()) {
-			await this.startObserving()
-		}
 		this.log("Startup complete")
 	}
 
+	async _preparePage(navigateTo) {
+		if (navigateTo) {
+			await this.page.goto(MessagesPuppeteer.url)
+		} else {
+			await this.page.reload()
+		}
+		this.log("Injecting content script")
+		await this.page.addScriptTag({ path: "./src/contentscript.js", type: "module" })
+	}
+
 	/**
-	 * Wait for the session to be logged in and monitor QR code changes while it's not.
+	 * Wait for the session to be logged in and monitor changes while it's not.
 	 */
-	async waitForLogin() {
+	async waitForLogin(login_type, login_data) {
 		if (await this.isLoggedIn()) {
 			return
 		}
-		const qrSelector = "mw-authentication-container mw-qr-code"
-		if (!await this.page.$("mat-slide-toggle.mat-checked")) {
-			this.log("Clicking Remember Me button")
-			await this.page.click("mat-slide-toggle:not(.mat-checked) > label")
-		} else {
-			this.log("Remember Me button already clicked")
+		this.loginRunning = true
+		this.loginCancelled = false
+
+		const loginContentArea = await this.page.waitForSelector("#login_content")
+
+		switch (login_type) {
+		case "qr": {
+			this.log("Running QR login")
+			const qrButton = await this.page.waitForSelector("#login_qr_btn")
+			await qrButton.click()
+
+			const qrElement = await this.page.waitForSelector("#login_qrcode_area div[title]", {visible: true})
+			const currentQR = await this.page.evaluate(element => element.title, qrElement)
+			this._receiveQRChange(currentQR)
+
+			await this.page.evaluate(
+				element => window.__mautrixController.addQRChangeObserver(element), qrElement)
+			await this.page.evaluate(
+				element => window.__mautrixController.addQRAppearObserver(element), loginContentArea)
+
+			break
 		}
-		this.log("Fetching current QR code")
-		const currentQR = await this.page.$eval(qrSelector,
-			element => element.getAttribute("data-qr-code"))
-		this._receiveQRChange(currentQR)
-		this.log("Adding QR observer")
-		await this.page.$eval(qrSelector,
-			element => window.__mautrixController.addQRObserver(element))
-		this.log("Waiting for login")
-		await this.page.waitForSelector("mws-conversations-list .conv-container", {
-			visible: true,
-			timeout: 0,
-		})
-		this.log("Removing QR observer")
-		await this.page.evaluate(() => window.__mautrixController.removeQRObserver())
+		case "email": {
+			this.log("Running email login")
+			if (!login_data) {
+				_sendLoginFailure("No login credentials provided for email login")
+				return
+			}
+
+			const emailButton = await this.page.waitForSelector("#login_email_btn")
+			await emailButton.click()
+
+			const emailArea = await this.page.waitForSelector("#login_email_area", {visible: true})
+			this.login_email = login_data["email"]
+			this.login_password = login_data["password"]
+			this._sendEmailCredentials()
+
+			await this.page.evaluate(
+				element => window.__mautrixController.addEmailAppearObserver(element), loginContentArea)
+
+			break
+		}
+		// TODO Phone number login
+		default:
+			_sendLoginFailure(`Invalid login type: ${login_type}`)
+			return
+		}
+
+		await this.page.evaluate(
+			element => window.__mautrixController.addPINAppearObserver(element), loginContentArea)
+		await this.page.$eval("#layer_contents",
+			element => window.__mautrixController.addExpiryObserver(element))
+
+		this.log("Waiting for login response")
+		let doneWaiting = false
+		let loginSuccess = false
+		const cancelableResolve = (promiseWithShortTimeout) => {
+			const executor = (resolve, reject) => {
+				promiseWithShortTimeout.then(
+					value => {
+						this.log(`Done: ${value}`)
+						doneWaiting = true
+						resolve(value)
+					},
+					reason => {
+						if (!doneWaiting) {
+							this.log(`Not done, waiting some more. ${reason}`)
+							setTimeout(executor, 3000, resolve, reject)
+						} else {
+							this.log(`Final fail. ${reason}`)
+							resolve()
+						}
+					}
+				)
+			}
+			return new Promise(executor)
+		}
+
+		const result = await Promise.race([
+			this.page.waitForSelector("#wrap_message_sync", {timeout: 2000})
+				.then(element => {
+					loginSuccess = true
+					return element
+				}),
+			this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
+				.then(element => element.innerText),
+			this._waitForLoginCancel(),
+		].map(promise => cancelableResolve(promise)))
+
+		this.log("Removing observers")
+		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
+		await this.page.evaluate(() => window.__mautrixController.removeLoginChildrenObserver(element))
+		await this.page.evaluate(() => window.__mautrixController.removeExpiryObserver())
+		delete this.login_email
+		delete this.login_password
+
+		if (!loginSuccess) {
+			_sendLoginFailure(result)
+			return
+		}
+
+		this.log("Waiting for sync")
+		await this.page.waitForFunction(
+			messageSyncElement => {
+				const text = messageSyncElement.innerText
+				return text == 'Syncing messages... 100%'
+			},
+			{},
+			result)
+
 		await this.startObserving()
+		this.loginRunning = false
 		this.log("Login complete")
+	}
+
+	/**
+	 * Cancel an ongoing login attempt.
+	 */
+	async cancelLogin() {
+		if (this.loginRunning) {
+			this.loginCancelled = true
+			//await this._preparePage(false)
+		}
+	}
+
+	_waitForLoginCancel() {
+		return new Promise((resolve, reject) => {
+			console.log(`>>>>> ${this.loginCancelled}`)
+			if (this.loginCancelled) {
+				resolve()
+			} else {
+				reject()
+			}
+		})
 	}
 
 	/**
@@ -166,14 +281,17 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<boolean>} - Whether or not the session is logged in.
 	 */
 	async isLoggedIn() {
-		return await this.page.$("mw-main-container mws-conversations-list") !== null
+		return await this.page.$("#wrap_message_sync") !== null
 	}
 
 	async isPermanentlyDisconnected() {
-		return await this.page.$("mw-unable-to-connect-container") !== null
+		// TODO
+		//return await this.page.$("mw-unable-to-connect-container") !== null
+		return false
 	}
 
 	async isOpenSomewhereElse() {
+		/* TODO
 		try {
 			const text = await this.page.$eval("mws-dialog mat-dialog-content div",
 				elem => elem.textContent)
@@ -181,16 +299,15 @@ export default class MessagesPuppeteer {
 		} catch (err) {
 			return false
 		}
-	}
-
-	async clickDialogButton() {
-		await this.page.click("mws-dialog mat-dialog-actions button")
+		*/
+		return false
 	}
 
 	async isDisconnected() {
 		if (!await this.isLoggedIn()) {
 			return true
 		}
+		/* TODO
 		const offlineIndicators = await Promise.all([
 			this.page.$("mw-main-nav mw-banner mw-error-banner"),
 			this.page.$("mw-main-nav mw-banner mw-information-banner[title='Connecting']"),
@@ -198,6 +315,8 @@ export default class MessagesPuppeteer {
 			this.isOpenSomewhereElse(),
 		])
 		return offlineIndicators.some(indicator => Boolean(indicator))
+		*/
+		return false
 	}
 
 	/**
@@ -206,8 +325,11 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[ChatListInfo]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
+		/* TODO
 		return await this.page.$eval("mws-conversations-list .conv-container",
 			elem => window.__mautrixController.parseChatList(elem))
+		*/
+		return null
 	}
 
 	/**
@@ -266,7 +388,7 @@ export default class MessagesPuppeteer {
 
 	async startObserving() {
 		this.log("Adding chat list observer")
-		await this.page.$eval("mws-conversations-list .conv-container",
+		await this.page.$eval("#wrap_chat_list",
 			element => window.__mautrixController.addChatListObserver(element))
 	}
 
@@ -276,7 +398,9 @@ export default class MessagesPuppeteer {
 	}
 
 	_listItemSelector(id) {
-		return `mws-conversation-list-item > a.list-item[href="/web/conversations/${id}"]`
+		// TODO
+		//return `mws-conversation-list-item > a.list-item[href="/web/conversations/${id}"]`
+		return ''
 	}
 
 	async _switchChatUnsafe(id) {
@@ -365,6 +489,20 @@ export default class MessagesPuppeteer {
 		}
 	}
 
+	async _sendEmailCredentials() {
+		this.log("Inputting login credentials")
+
+		// Triple-click email input field to select all existing text and replace it on type
+		const emailInput = await this.page.$("#line_login_email")
+		await emailInput.click({clickCount: 3})
+		await emailInput.type(this.login_email)
+
+		// Password input field always starts empty, so no need to select its text first
+		await this.page.type("#line_login_pwd", this.login_password)
+
+		await this.page.click("button#login_btn")
+	}
+
 	_receiveQRChange(url) {
 		if (this.client) {
 			this.client.sendQRCode(url).catch(err =>
@@ -372,5 +510,29 @@ export default class MessagesPuppeteer {
 		} else {
 			this.log("No client connected, not sending new QR")
 		}
+	}
+
+	_receivePIN(pin) {
+		if (this.client) {
+			this.client.sendPIN(`Your PIN is: ${pin}`).catch(err =>
+				this.error("Failed to send new PIN to client:", err))
+		} else {
+			this.log("No client connected, not sending new PIN")
+		}
+	}
+
+	_sendLoginFailure(reason) {
+		this.error(`Login failure: ${reason ? reason : 'cancelled'}`)
+		if (this.client) {
+			this.client.sendFailure(reason).catch(err =>
+				this.error("Failed to send failure reason to client:", err))
+		} else {
+			this.log("No client connected, not sending failure reason")
+		}
+	}
+
+	async _receiveExpiry(button) {
+		this.log("Something expired, clicking OK button to continue")
+		await this.page.click(button)
 	}
 }

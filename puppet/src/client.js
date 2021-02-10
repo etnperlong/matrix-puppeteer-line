@@ -116,6 +116,24 @@ export default class Client {
 		})
 	}
 
+	sendPIN(pin) {
+		this.log(`Sending PIN ${pin} to client`)
+		return this._write({
+			id: --this.notificationID,
+			command: "pin",
+			pin,
+		})
+	}
+
+	sendFailure(reason) {
+		this.log(`Sending failure "${reason}" to client`)
+		return this._write({
+			id: --this.notificationID,
+			command: "failure",
+			reason,
+		})
+	}
+
 	handleStart = async (req) => {
 		let started = false
 		if (this.puppet === null) {
@@ -205,7 +223,8 @@ export default class Client {
 				start: this.handleStart,
 				stop: this.handleStop,
 				disconnect: () => this.stop(),
-				login: () => this.puppet.waitForLogin(),
+				login: req => this.puppet.waitForLogin(req.login_type, req.login_data),
+				cancel_login: () => this.puppet.cancelLogin(),
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
 				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids),
 				get_chats: () => this.puppet.getRecentChats(),

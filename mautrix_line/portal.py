@@ -268,7 +268,7 @@ class Portal(DBPortal, BasePortal):
 
     @property
     def bridge_info_state_key(self) -> str:
-        return f"net.maunium.amp://androidmessages/{self.chat_id}"
+        return f"net.maunium.line://line/{self.chat_id}"
 
     @property
     def bridge_info(self) -> Dict[str, Any]:
@@ -276,8 +276,8 @@ class Portal(DBPortal, BasePortal):
             "bridgebot": self.az.bot_mxid,
             "creator": self.main_intent.mxid,
             "protocol": {
-                "id": "androidmessages",
-                "displayname": "Android Messages",
+                "id": "line",
+                "displayname": "LINE",
                 "avatar_url": self.config["appservice.bot_avatar"],
             },
             "channel": {

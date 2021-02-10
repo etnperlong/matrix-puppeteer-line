@@ -56,8 +56,9 @@ class Puppet(DBPuppet, BasePuppet):
         cls.mxid_template = SimpleTemplate(cls.config["bridge.username_template"], "userid",
                                            prefix="@", suffix=f":{cls.hs_domain}", type=str)
         secret = cls.config["bridge.login_shared_secret"]
-        cls.login_shared_secret_map[cls.hs_domain] = secret.encode("utf-8") if secret else None
-        cls.login_device_name = "Android Messages Bridge"
+        if secret:
+            cls.login_shared_secret_map[cls.hs_domain] = secret.encode("utf-8")
+        cls.login_device_name = "LINE Bridge"
 
     async def update_info(self, info: Participant) -> None:
         update = False

@@ -38,6 +38,7 @@ const config = JSON.parse(fs.readFileSync(configPath).toString())
 MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
 MessagesPuppeteer.disableDebug = !!config.disable_debug
 MessagesPuppeteer.url = config.url
+MessagesPuppeteer.extensionDir = config.extension_dir || MessagesPuppeteer.extensionDir
 
 const api = new PuppetAPI(config.listen)
 

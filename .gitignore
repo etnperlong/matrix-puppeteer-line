@@ -11,6 +11,7 @@ __pycache__
 /.eggs
 
 profiles
+puppet/extension_files
 
 /config.yaml
 /registration.yaml

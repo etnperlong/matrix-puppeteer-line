@@ -47,4 +47,4 @@ class MatrixHandler(BaseMatrixHandler):
             inviter.notice_room = room_id
             await inviter.update()
             await self.az.intent.send_notice(room_id, "This room has been marked as your "
-                                                      "Android Messages bridge notice room.")
+                                                      "LINE bridge notice room.")

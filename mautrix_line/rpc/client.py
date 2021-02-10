@@ -13,20 +13,17 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import AsyncGenerator, TypedDict, List, Dict, Callable, Awaitable, Any
+from typing import AsyncGenerator, TypedDict, List, Tuple, Dict, Callable, Awaitable, Any
 from collections import deque
 import asyncio
 
 from .rpc import RPCClient
 from .types import ChatListInfo, ChatInfo, Message, StartStatus
+from mautrix_line.rpc.types import RPCError
 
 
-class QRCommand(TypedDict):
-    url: str
-
-
-class LoginComplete(Exception):
-    pass
+class LoginCommand(TypedDict):
+    content: str
 
 
 class Client(RPCClient):
@@ -66,22 +63,48 @@ class Client(RPCClient):
 
         self.add_event_handler("message", wrapper)
 
-    async def login(self) -> AsyncGenerator[str, None]:
+    # TODO Type hint for sender
+    async def login(self, sender, **login_data) -> AsyncGenerator[Tuple[str, str], None]:
+        login_data["login_type"] = sender.command_status["login_type"]
+
         data = deque()
         event = asyncio.Event()
 
-        async def qr_handler(req: QRCommand) -> None:
-            data.append(req["url"])
+        async def qr_handler(req: LoginCommand) -> None:
+            data.append(("qr", req["url"]))
             event.set()
 
+        async def pin_handler(req: LoginCommand) -> None:
+            data.append(("pin", req["pin"]))
+            event.set()
+
+        async def failure_handler(req: LoginCommand) -> None:
+            data.append(("failure", req["reason"]))
+            event.set()
+
+        async def cancel_watcher() -> None:
+            try:
+                while sender.command_status is not None:
+                    await asyncio.sleep(1)
+                await self._raw_request("cancel_login")
+            except asyncio.CancelledError:
+                pass
+        cancel_watcher_task = asyncio.create_task(cancel_watcher())
+
         def login_handler(_fut: asyncio.Future) -> None:
+            cancel_watcher_task.cancel()
+            e = _fut.exception()
+            if e is not None:
+                data.append(("error", str(e)))
             data.append(None)
             event.set()
 
-        login_future = await self._raw_request("login")
+        login_future = await self._raw_request("login", **login_data)
         login_future.add_done_callback(login_handler)
 
         self.add_event_handler("qr", qr_handler)
+        self.add_event_handler("pin", pin_handler)
+        self.add_event_handler("failure", failure_handler)
         try:
             while True:
                 await event.wait()
@@ -93,3 +116,5 @@ class Client(RPCClient):
                 event.clear()
         finally:
             self.remove_event_handler("qr", qr_handler)
+            self.remove_event_handler("pin", pin_handler)
+            self.remove_event_handler("failure", failure_handler)
