@@ -79,7 +79,7 @@ class Client(RPCClient):
             event.set()
 
         async def failure_handler(req: LoginCommand) -> None:
-            data.append(("failure", req["reason"]))
+            data.append(("failure", req.get("reason")))
             event.set()
 
         async def cancel_watcher() -> None:

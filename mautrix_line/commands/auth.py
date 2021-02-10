@@ -82,10 +82,11 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
                 pin_event_id = await evt.az.intent.send_message(evt.room_id, content)
         elif item[0] in ("failure", "error"):
             # TODO Handle errors differently?
-            reason = item[1]
             failure = True
-            content = TextMessageEventContent(body=reason, msgtype=MessageType.NOTICE)
-            await evt.az.intent.send_message(evt.room_id, content)
+            reason = item[1]
+            if reason:
+                content = TextMessageEventContent(body=reason, msgtype=MessageType.NOTICE)
+                await evt.az.intent.send_message(evt.room_id, content)
         # else: pass
 
     if not failure and evt.sender.command_status:

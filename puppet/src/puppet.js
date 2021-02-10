@@ -150,7 +150,7 @@ export default class MessagesPuppeteer {
 		case "email": {
 			this.log("Running email login")
 			if (!login_data) {
-				_sendLoginFailure("No login credentials provided for email login")
+				this._sendLoginFailure("No login credentials provided for email login")
 				return
 			}
 
@@ -169,7 +169,7 @@ export default class MessagesPuppeteer {
 		}
 		// TODO Phone number login
 		default:
-			_sendLoginFailure(`Invalid login type: ${login_type}`)
+			this._sendLoginFailure(`Invalid login type: ${login_type}`)
 			return
 		}
 
@@ -181,20 +181,17 @@ export default class MessagesPuppeteer {
 		this.log("Waiting for login response")
 		let doneWaiting = false
 		let loginSuccess = false
-		const cancelableResolve = (promiseWithShortTimeout) => {
+		const cancelableResolve = (promiseFn) => {
 			const executor = (resolve, reject) => {
-				promiseWithShortTimeout.then(
+				promiseFn().then(
 					value => {
-						this.log(`Done: ${value}`)
 						doneWaiting = true
 						resolve(value)
 					},
 					reason => {
 						if (!doneWaiting) {
-							this.log(`Not done, waiting some more. ${reason}`)
-							setTimeout(executor, 3000, resolve, reject)
+							setTimeout(executor, 1000, resolve, reject)
 						} else {
-							this.log(`Final fail. ${reason}`)
 							resolve()
 						}
 					}
@@ -204,25 +201,27 @@ export default class MessagesPuppeteer {
 		}
 
 		const result = await Promise.race([
-			this.page.waitForSelector("#wrap_message_sync", {timeout: 2000})
+			() => this.page.waitForSelector("#wrap_message_sync", {timeout: 2000})
 				.then(element => {
 					loginSuccess = true
 					return element
 				}),
-			this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
+			() => this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
 				.then(element => element.innerText),
-			this._waitForLoginCancel(),
-		].map(promise => cancelableResolve(promise)))
+			() => this._waitForLoginCancel(),
+		].map(promiseFn => cancelableResolve(promiseFn)))
 
 		this.log("Removing observers")
 		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
-		await this.page.evaluate(() => window.__mautrixController.removeLoginChildrenObserver(element))
+		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
+		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
+		await this.page.evaluate(() => window.__mautrixController.removePINAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeExpiryObserver())
 		delete this.login_email
 		delete this.login_password
 
 		if (!loginSuccess) {
-			_sendLoginFailure(result)
+			this._sendLoginFailure(result)
 			return
 		}
 
@@ -246,13 +245,12 @@ export default class MessagesPuppeteer {
 	async cancelLogin() {
 		if (this.loginRunning) {
 			this.loginCancelled = true
-			//await this._preparePage(false)
+			await this._preparePage(false)
 		}
 	}
 
 	_waitForLoginCancel() {
 		return new Promise((resolve, reject) => {
-			console.log(`>>>>> ${this.loginCancelled}`)
 			if (this.loginCancelled) {
 				resolve()
 			} else {
