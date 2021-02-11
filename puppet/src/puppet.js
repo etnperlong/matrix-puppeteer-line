@@ -157,10 +157,10 @@ export default class MessagesPuppeteer {
 			const emailButton = await this.page.waitForSelector("#login_email_btn")
 			await emailButton.click()
 
-			const emailArea = await this.page.waitForSelector("#login_email_area", {visible: true})
+			await this.page.waitForSelector("#login_email_area", {visible: true})
 			this.login_email = login_data["email"]
 			this.login_password = login_data["password"]
-			this._sendEmailCredentials()
+			await this._sendEmailCredentials()
 
 			await this.page.evaluate(
 				element => window.__mautrixController.addEmailAppearObserver(element), loginContentArea)
@@ -202,12 +202,12 @@ export default class MessagesPuppeteer {
 
 		const result = await Promise.race([
 			() => this.page.waitForSelector("#wrap_message_sync", {timeout: 2000})
-				.then(element => {
+				.then(value => {
 					loginSuccess = true
-					return element
+					return value
 				}),
 			() => this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
-				.then(element => element.innerText),
+				.then(value => this.page.evaluate(element => element.innerText, value)),
 			() => this._waitForLoginCancel(),
 		].map(promiseFn => cancelableResolve(promiseFn)))
 
@@ -490,13 +490,16 @@ export default class MessagesPuppeteer {
 	async _sendEmailCredentials() {
 		this.log("Inputting login credentials")
 
-		// Triple-click email input field to select all existing text and replace it on type
-		const emailInput = await this.page.$("#line_login_email")
-		await emailInput.click({clickCount: 3})
-		await emailInput.type(this.login_email)
+		// Triple-click input fields to select all existing text and replace it on type
+		let input
 
-		// Password input field always starts empty, so no need to select its text first
-		await this.page.type("#line_login_pwd", this.login_password)
+		input = await this.page.$("#line_login_email")
+		await input.click({clickCount: 3})
+		await input.type(this.login_email)
+
+		input = await this.page.$("#line_login_pwd")
+		await input.click({clickCount: 3})
+		await input.type(this.login_password)
 
 		await this.page.click("button#login_btn")
 	}

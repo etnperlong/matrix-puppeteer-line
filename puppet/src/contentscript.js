@@ -413,8 +413,8 @@ class MautrixController {
 		this.emailAppearObserver = new MutationObserver(changes => {
 			for (const change of changes) {
 				for (const node of change.addedNodes) {
-					const emailElement = node.querySelector("#login_email_btn")
-					if (emailElement) {
+					const emailArea = node.querySelector("#login_email_area")
+					if (emailArea && !emailArea.getAttribute("class").includes("MdNonDisp")) {
 						window.__mautrixSendEmailCredentials()
 						return
 					}
