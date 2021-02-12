@@ -126,7 +126,6 @@ export default class MessagesPuppeteer {
 			return
 		}
 		this.loginRunning = true
-		this.loginCancelled = false
 
 		const loginContentArea = await this.page.waitForSelector("#login_content")
 
@@ -226,17 +225,21 @@ export default class MessagesPuppeteer {
 		}
 
 		this.log("Waiting for sync")
-		await this.page.waitForFunction(
-			messageSyncElement => {
-				const text = messageSyncElement.innerText
-				return text == 'Syncing messages... 100%'
-			},
-			{},
-			result)
+		try {
+			await this.page.waitForFunction(
+				messageSyncElement => {
+					const text = messageSyncElement.innerText
+					return text == 'Syncing messages... 100%'
+				},
+				{},
+				result)
 
-		await this.startObserving()
-		this.loginRunning = false
-		this.log("Login complete")
+			this.loginRunning = false
+			await this.startObserving()
+			this.log("Login complete")
+		} catch (err) {
+			this._sendLoginFailure(`Failed to sync: ${err}`)
+		}
 	}
 
 	/**
@@ -244,6 +247,7 @@ export default class MessagesPuppeteer {
 	 */
 	async cancelLogin() {
 		if (this.loginRunning) {
+			this.loginRunning = false
 			this.loginCancelled = true
 			await this._preparePage(false)
 		}
@@ -252,6 +256,7 @@ export default class MessagesPuppeteer {
 	_waitForLoginCancel() {
 		return new Promise((resolve, reject) => {
 			if (this.loginCancelled) {
+				this.loginCancelled = false
 				resolve()
 			} else {
 				reject()
@@ -523,6 +528,7 @@ export default class MessagesPuppeteer {
 	}
 
 	_sendLoginFailure(reason) {
+		this.loginRunning = false
 		this.error(`Login failure: ${reason ? reason : 'cancelled'}`)
 		if (this.client) {
 			this.client.sendFailure(reason).catch(err =>
