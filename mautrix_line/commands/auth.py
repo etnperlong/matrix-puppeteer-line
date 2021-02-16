@@ -114,6 +114,7 @@ async def login_email(evt: CommandEvent) -> None:
         return
     if not await login_prep(evt, "email"):
         return
+    await evt.az.intent.redact(evt.room_id, evt.event_id)
     gen = evt.sender.client.login(
             evt.sender,
             login_data=dict(email=evt.args[0], password=evt.args[1]))
