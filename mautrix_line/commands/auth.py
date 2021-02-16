@@ -90,10 +90,8 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
         # else: pass
 
     if not failure and evt.sender.command_status:
-        await evt.reply("Successfully logged in, now go home")
-        # TODO
-        #await evt.reply("Successfully logged in, now syncing")
-        #await evt.sender.sync()
+        await evt.reply("Successfully logged in, now syncing")
+        await evt.sender.sync()
     # else command was cancelled or failed. Don't post message about it, "cancel" command or failure did already
     evt.sender.command_status = None
 

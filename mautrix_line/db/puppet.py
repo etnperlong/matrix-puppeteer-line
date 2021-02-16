@@ -28,6 +28,7 @@ class Puppet:
 
     mid: str
     name: Optional[str]
+    # TODO avatar: Optional[str]
     is_registered: bool
 
     async def insert(self) -> None:

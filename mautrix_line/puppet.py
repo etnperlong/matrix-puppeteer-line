@@ -63,6 +63,7 @@ class Puppet(DBPuppet, BasePuppet):
     async def update_info(self, info: Participant) -> None:
         update = False
         update = await self._update_name(info.name) or update
+        # TODO Update avatar
         if update:
             await self.update()
 

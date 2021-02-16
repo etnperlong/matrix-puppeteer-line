@@ -229,7 +229,8 @@ export default class MessagesPuppeteer {
 			await this.page.waitForFunction(
 				messageSyncElement => {
 					const text = messageSyncElement.innerText
-					return text == 'Syncing messages... 100%'
+					return text.startsWith("Syncing messages...")
+						&& (text.endsWith("100%") || text.endsWith("NaN%"))
 				},
 				{},
 				result)
@@ -328,18 +329,14 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[ChatListInfo]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
-		/* TODO
-		return await this.page.$eval("mws-conversations-list .conv-container",
+		return await this.page.$eval("#_chat_list_body",
 			elem => window.__mautrixController.parseChatList(elem))
-		*/
-		return null
 	}
 
 	/**
 	 * @typedef ChatInfo
 	 * @type object
 	 * @property {[Participant]} participants
-	 * @property {boolean} readonly
 	 */
 
 	/**
@@ -391,7 +388,7 @@ export default class MessagesPuppeteer {
 
 	async startObserving() {
 		this.log("Adding chat list observer")
-		await this.page.$eval("#wrap_chat_list",
+		await this.page.$eval("#_chat_list_body",
 			element => window.__mautrixController.addChatListObserver(element))
 	}
 
@@ -401,38 +398,69 @@ export default class MessagesPuppeteer {
 	}
 
 	_listItemSelector(id) {
-		// TODO
-		//return `mws-conversation-list-item > a.list-item[href="/web/conversations/${id}"]`
-		return ''
+		return `#_chat_list_body div[data-chatid="${id}"]`
 	}
 
 	async _switchChatUnsafe(id) {
 		this.log("Switching to chat", id)
-		await this.page.click(this._listItemSelector(id))
+		const chatListItem = await this.page.$(this._listItemSelector(id))
+        await chatListItem.click()
+        return chatListItem
 	}
 
 	async _getChatInfoUnsafe(id) {
-		await this._switchChatUnsafe(id)
-		await this.page.waitForSelector("mw-conversation-menu button", { timeout: 500 })
-		await this.page.click("mw-conversation-menu button")
-		await this.page.waitForSelector(".mat-menu-panel button.mat-menu-item.details",
-			{ timeout: 500 })
-		const readonly = await this.page.$("mw-conversation-container .compose-readonly") !== null
-		// There's a 250ms animation and I don't know how to wait for it properly
-		await sleep(250)
-		await this.page.click(".mat-menu-panel button.mat-menu-item.details")
-		await this.page.waitForSelector("mws-dialog mw-conversation-details .participants",
-			{ timeout: 500 })
-		const participants = await this.page.$eval(
-			"mws-dialog mw-conversation-details .participants",
-			elem => window.__mautrixController.parseParticipantList(elem))
-		await this.page.click("mws-dialog mat-dialog-actions button.confirm")
-		return {
-			participants,
-			readonly,
-			...await this.page.$eval(this._listItemSelector(id),
-				elem => window.__mautrixController.parseChatListItem(elem)),
+        // TODO This will mark the chat as "read"!
+		const chatListItem = await this._switchChatUnsafe(id)
+        const chatHeader = await this.page.waitForSelector("#_chat_header_area > .mdRGT04Link")
+
+		/* TODO Make this work
+		const chatListName = await chatListItem.evaluate(e => window.__mautrixController.getChatListItemName(e))
+		this.log(`Waiting for chat header title to be "${chatListName}"`)
+        const chatHeaderTitleElement = await chatHeader.$(".mdRGT04Ttl")
+        await this.page.waitForFunction((element, targetText) => {
+                element.innerText == targetText
+            },
+            {},
+            chatHeaderTitleElement, chatListName)
+		*/await this.page.waitForTimeout(3000)
+
+		this.log("Clicking chat header")
+		await chatHeader.click()
+		const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
+
+		this.log("Gathering participants")
+		let participants
+        const participantList = await chatDetailArea.$("ul.mdRGT13Ul")
+		if (participantList) {
+			if (await chatDetailArea.$("#leaveGroup")) {
+				this.log("Found group")
+				// This is a *group* (like a Matrix room)
+				// TODO Is a group not actually created until a message is sent(?)
+				// 		If so, maybe don't create a portal until there is a message.
+				participants = await participantList.evaluate(
+					elem => window.__mautrixController.parseParticipantList(elem))
+			} else if (await chatDetailArea.$("ul [data-click-name='leave_room'")) {
+				this.log("Found room")
+				// This is a *room* (canonical multi-user DM)
+				// TODO Find a way to get participant IDs from a room member list!!
+				participants = []
+			}
 		}
+		else
+		{
+			this.log("Found chat")
+			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
+			participants = [{
+				id: id, // the ID of a 1:1 chat is the other user's member ID
+				name: await participantElement.$eval(
+					"#_chat_contact_detail_view > a",
+					element => element.innerText),
+			}]
+			// TODO Or just look up the member ID in the contact list?
+		}
+
+		this.log(`Found participants: ${participants}`)
+		return participants
 	}
 
 	async _sendMessageUnsafe(chatID, text) {

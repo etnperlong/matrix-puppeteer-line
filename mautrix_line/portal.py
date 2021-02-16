@@ -247,7 +247,8 @@ class Portal(DBPortal, BasePortal):
 
     async def backfill(self, source: 'u.User') -> None:
         with self.backfill_lock:
-            await self._backfill(source)
+            self.log.debug("Backfill: TODO!")
+            #await self._backfill(source)
 
     async def _backfill(self, source: 'u.User') -> None:
         self.log.debug("Backfilling history through %s", source.mxid)
@@ -362,7 +363,7 @@ class Portal(DBPortal, BasePortal):
                     self.main_intent.mxid: 9001,
                 },
                 "events": {},
-                "events_default": 100 if info.readonly else 0,
+                "events_default": 100,
                 "state_default": 50,
                 "invite": 50,
                 "redact": 0

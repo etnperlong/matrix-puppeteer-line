@@ -191,31 +191,28 @@ class MautrixController {
 	/**
 	 * @typedef Participant
 	 * @type object
-	 * @property {string} id - The unique-ish identifier for the participant
+	 * @property {string} id - The member ID for the participant
+	 * TODO @property {string} avatar - The URL of the participant's avatar
 	 * @property {string} name - The contact list name of the participant
 	 */
 
 	/**
-	 * Parse a mw-conversation-details .participants list.
+	 * Parse a group participants list.
+	 * TODO Find what works for a *room* participants list...!
 	 *
 	 * @param {Element} element - The participant list element.
 	 * @return {[Participant]} - The list of participants.
 	 */
 	parseParticipantList(element) {
-		const participants = []
-		for (const participantElem of element.getElementsByClassName("participant")) {
-			const nameElem = participantElem.querySelector(".participant-name")
-			const name = nameElem.innerText.trim()
-			let id = name
-			if (nameElem.nextElementSibling && nameElem.nextElementSibling.hasAttribute("data-e2e-details-participant-number")) {
-				id = nameElem.nextElementSibling.innerText
+		// TODO Slice to exclude first member, which is always yourself (right?)
+		//return Array.from(element.children).slice(1).map(child => {
+		return Array.from(element.children).map(child => {
+			return {
+				id: child.getAttribute("data-mid"),
+				// TODO avatar: child.querySelector("img").src,
+				name: child.querySelector(".mdRGT13Ttl").innerText,
 			}
-			// For phone numbers, remove the + prefix
-			// For non-number IDs, prepend name_ and force-lowercase
-			id = /^\+\d+$/.test(id) ? id.substr(1) : `name_${id.toLowerCase()}`
-			participants.push({ name, id })
-		}
-		return participants
+		})
 	}
 
 	/**
@@ -223,27 +220,42 @@ class MautrixController {
 	 * @type object
 	 * @property {number} id - The ID of the chat.
 	 * @property {string} name - The name of the chat.
+	 * TODO @property {string} icon - The icon of the chat.
 	 * @property {string} lastMsg - The most recent message in the chat.
 	 *                              May be prefixed by sender name.
 	 * @property {string} lastMsgDate - An imprecise date for the most recent message
 	 *                                  (e.g. "7:16 PM", "Thu" or "Aug 4")
 	 */
 
+	getChatListItemId(element) {
+		return element.getAttribute("data-chatid")
+	}
+
+	getChatListItemName(element) {
+		return element.querySelector(".mdCMN04Ttl").innerText
+	}
+
+	getChatListItemLastMsg(element) {
+		return element.querySelector(".mdCMN04Desc").innerText
+	}
+
+	getChatListItemLastMsgDate(element) {
+		return element.querySelector("time").innerText
+	}
+
 	/**
-	 * Parse a mws-conversation-list-item element.
+	 * Parse a conversation list item element.
 	 *
 	 * @param {Element} element - The element to parse.
 	 * @return {ChatListInfo} - The info in the element.
 	 */
 	parseChatListItem(element) {
-		if (element.tagName.toLowerCase() === "mws-conversation-list-item") {
-			element = element.querySelector("a.list-item")
-		}
 		return {
-			id: +element.getAttribute("href").split("/").pop(),
-			name: element.querySelector("h3.name").innerText,
-			lastMsg: element.querySelector("mws-conversation-snippet").innerText,
-			lastMsgDate: element.querySelector("mws-relative-timestamp").innerText,
+			id: this.getChatListItemId(element),
+			name: this.getChatListItemName(element),
+			// TODO icon, but only for groups
+			lastMsg: this.getChatListItemLastMsg(element),
+			lastMsgDate: this.getChatListItemLastMsgDate(element),
 		}
 	}
 
@@ -253,14 +265,8 @@ class MautrixController {
 	 * @return {[ChatListInfo]} - The list of chats.
 	 */
 	parseChatList(element) {
-		const chats = []
-		for (const child of element.children) {
-			if (child.tagName.toLowerCase() !== "mws-conversation-list-item") {
-				continue
-			}
-			chats.push(this.parseChatListItem(child))
-		}
-		return chats
+		return Array.from(element.children).map(
+			child => this.parseChatListItem(child.firstElementChild))
 	}
 
 	/**
@@ -301,6 +307,7 @@ class MautrixController {
 	 * @private
 	 */
 	_observeChatListMutations(mutations) {
+		/* TODO
 		const changedChatIDs = new Set()
 		for (const change of mutations) {
 			console.debug("Chat list mutation:", change)
@@ -319,6 +326,7 @@ class MautrixController {
 				() => console.debug("Chat list mutations dispatched"),
 				err => console.error("Error dispatching chat list mutations:", err))
 		}
+		*/
 	}
 
 	/**
@@ -330,16 +338,16 @@ class MautrixController {
 		if (this.chatListObserver !== null) {
 			this.removeChatListObserver()
 		}
-		/* TODO
 		this.chatListObserver = new MutationObserver(mutations => {
+			/* TODO
 			try {
 				this._observeChatListMutations(mutations)
 			} catch (err) {
 				console.error("Error observing chat list mutations:", err)
 			}
+			*/
 		})
 		this.chatListObserver.observe(element, { childList: true, subtree: true })
-		*/
 		console.debug("Started chat list observer")
 	}
 
@@ -406,7 +414,7 @@ class MautrixController {
 		}
 	}
 
-	addEmailAppearObserver(element, login_type) {
+	addEmailAppearObserver(element) {
 		if (this.emailAppearObserver !== null) {
 			this.removeEmailAppearObserver()
 		}
@@ -433,7 +441,7 @@ class MautrixController {
 		}
 	}
 
-	addPINAppearObserver(element, login_type) {
+	addPINAppearObserver(element) {
 		if (this.pinAppearObserver !== null) {
 			this.removePINAppearObserver()
 		}

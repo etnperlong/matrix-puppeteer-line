@@ -23,7 +23,7 @@ upgrade_table = UpgradeTable()
 @upgrade_table.register(description="Initial revision")
 async def upgrade_v1(conn: Connection) -> None:
     await conn.execute("""CREATE TABLE portal (
-        chat_id     INTEGER PRIMARY KEY,
+        chat_id     TEXT PRIMARY KEY,
         other_user  TEXT,
         mxid        TEXT,
         name        TEXT,
@@ -42,7 +42,7 @@ async def upgrade_v1(conn: Connection) -> None:
         mxid     TEXT NOT NULL,
         mx_room  TEXT NOT NULL,
         mid      INTEGER PRIMARY KEY,
-        chat_id  INTEGER NOT NULL,
+        chat_id  TEXT NOT NULL,
 
         UNIQUE (mxid, mx_room)
     )""")
