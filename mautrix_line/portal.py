@@ -318,7 +318,7 @@ class Portal(DBPortal, BasePortal):
         await self.main_intent.invite_user(self.mxid, source.mxid, check_cache=True)
         puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
         if puppet:
-            await puppet.intent.ensure_joined(self.mxid)
+            await puppet.az.intent.ensure_joined(self.mxid)
 
         await self.update_info(info)
 
@@ -395,7 +395,7 @@ class Portal(DBPortal, BasePortal):
                 puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
                 if puppet:
                     try:
-                        await puppet.intent.join_room_by_id(self.mxid)
+                        await puppet.az.intent.join_room_by_id(self.mxid)
                     except MatrixError:
                         self.log.debug("Failed to join custom puppet into newly created portal",
                                        exc_info=True)

@@ -92,6 +92,7 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
     if not failure and evt.sender.command_status:
         await evt.reply("Successfully logged in, now syncing")
         await evt.sender.sync()
+        await evt.reply("Syncing complete")
     # else command was cancelled or failed. Don't post message about it, "cancel" command or failure did already
     evt.sender.command_status = None
 
@@ -107,12 +108,12 @@ async def login_qr(evt: CommandEvent) -> None:
                  help_text="Log into LINE via email/password",
                  help_args="<_email_> <_password_>")
 async def login_email(evt: CommandEvent) -> None:
+    await evt.az.intent.redact(evt.room_id, evt.event_id)
     if len(evt.args) != 2:
         await evt.reply("Usage: `$cmdprefix+sp login <email> <password>`")
         return
     if not await login_prep(evt, "email"):
         return
-    await evt.az.intent.redact(evt.room_id, evt.event_id)
     gen = evt.sender.client.login(
             evt.sender,
             login_data=dict(email=evt.args[0], password=evt.args[1]))

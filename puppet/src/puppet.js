@@ -27,7 +27,7 @@ export default class MessagesPuppeteer {
 	static executablePath = undefined
 	static disableDebug = false
 	static noSandbox = false
-	//static viewport = { width: 1920, height: 1080 }
+	static viewport = { width: 960, height: 880 }
 	static url = undefined
 	static extensionDir = 'extension_files'
 
@@ -231,16 +231,18 @@ export default class MessagesPuppeteer {
 					const text = messageSyncElement.innerText
 					return text.startsWith("Syncing messages...")
 						&& (text.endsWith("100%") || text.endsWith("NaN%"))
+						// TODO Sometimes it gets stuck at 99%...??
 				},
-				{},
+				{timeout: 10000}, // Assume 10 seconds is long enough
 				result)
-
-			this.loginRunning = false
-			await this.startObserving()
-			this.log("Login complete")
 		} catch (err) {
-			this._sendLoginFailure(`Failed to sync: ${err}`)
+			//this._sendLoginFailure(`Failed to sync: ${err}`)
+			this.log("LINE's sync took too long, assume it's fine and carry on...")
 		}
+
+		this.loginRunning = false
+		await this.startObserving()
+		this.log("Login complete")
 	}
 
 	/**
@@ -452,7 +454,7 @@ export default class MessagesPuppeteer {
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
 				id: id, // the ID of a 1:1 chat is the other user's member ID
-				name: await participantElement.$eval(
+				name: await chatDetailArea.$eval(
 					"#_chat_contact_detail_view > a",
 					element => element.innerText),
 			}]
@@ -460,7 +462,11 @@ export default class MessagesPuppeteer {
 		}
 
 		this.log(`Found participants: ${participants}`)
-		return participants
+		return {
+				participants,
+				...await this.page.$eval(this._listItemSelector(id),
+						elem => window.__mautrixController.parseChatListItem(elem)),
+		}
 	}
 
 	async _sendMessageUnsafe(chatID, text) {
@@ -475,12 +481,14 @@ export default class MessagesPuppeteer {
 	}
 
 	async _getMessagesUnsafe(id, minID = 0) {
+		/* TODO Also handle "decrypting" state
 		await this._switchChatUnsafe(id)
 		this.log("Waiting for messages to load")
 		await this.page.waitFor("mws-message-wrapper")
 		const messages = await this.page.$eval("mws-messages-list .content",
 			element => window.__mautrixController.parseMessageList(element))
 		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+		*/
 	}
 
 	async _processChatListChangeUnsafe(id) {
