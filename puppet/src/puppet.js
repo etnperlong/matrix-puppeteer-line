@@ -434,6 +434,11 @@ export default class MessagesPuppeteer {
 		let participants
         const participantList = await chatDetailArea.$("ul.mdRGT13Ul")
 		if (participantList) {
+			// TODO Use "id" syntax to tell if this is a chat/room/group, not selectors:
+			// 		c: group
+			// 		r: room
+			// 		u: chat
+			// 		It's defined by the LINE API!
 			if (await chatDetailArea.$("#leaveGroup")) {
 				this.log("Found group")
 				// This is a *group* (like a Matrix room)
@@ -461,7 +466,6 @@ export default class MessagesPuppeteer {
 			// TODO Or just look up the member ID in the contact list?
 		}
 
-		this.log(`Found participants: ${participants}`)
 		return {
 				participants,
 				...await this.page.$eval(this._listItemSelector(id),
@@ -575,7 +579,7 @@ export default class MessagesPuppeteer {
 
 	_receivePIN(pin) {
 		if (this.client) {
-			this.client.sendPIN(`Your PIN is: ${pin}`).catch(err =>
+			this.client.sendPIN(pin).catch(err =>
 				this.error("Failed to send new PIN to client:", err))
 		} else {
 			this.log("No client connected, not sending new PIN")

@@ -227,6 +227,7 @@ class MautrixController {
 	 */
 	parseParticipantList(element) {
 		// TODO Slice to exclude first member, which is always yourself (right?)
+		// TODO Only slice if double-puppeting is enabled!
 		//return Array.from(element.children).slice(1).map(child => {
 		return Array.from(element.children).map(child => {
 			return {
@@ -444,7 +445,7 @@ class MautrixController {
 			for (const change of changes) {
 				for (const node of change.addedNodes) {
 					const emailArea = node.querySelector("#login_email_area")
-					if (emailArea && !emailArea.getAttribute("class").includes("MdNonDisp")) {
+					if (emailArea && !emailArea.classList.contains("MdNonDisp")) {
 						window.__mautrixSendEmailCredentials()
 						return
 					}
@@ -496,7 +497,7 @@ class MautrixController {
 		}
 		const button = element.querySelector("dialog button")
 		this.expiryObserver = new MutationObserver(changes => {
-			if (changes.length == 1 && !changes[0].target.getAttribute("class").includes("MdNonDisp")) {
+			if (changes.length == 1 && !changes[0].target.classList.contains("MdNonDisp")) {
 				window.__mautrixExpiry(button)
 			}
 		})

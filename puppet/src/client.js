@@ -108,7 +108,7 @@ export default class Client {
 	}
 
 	sendQRCode(url) {
-		this.log("Sending QR", url, "to client")
+		this.log(`Sending QR ${url} to client`)
 		return this._write({
 			id: --this.notificationID,
 			command: "qr",
@@ -126,7 +126,7 @@ export default class Client {
 	}
 
 	sendFailure(reason) {
-		this.log(`Sending failure "${reason}" to client`)
+		this.log(`Sending failure to client${reason ? `: "${reason}"` : ""}`)
 		return this._write({
 			id: --this.notificationID,
 			command: "failure",
