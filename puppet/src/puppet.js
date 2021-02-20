@@ -93,9 +93,9 @@ export default class MessagesPuppeteer {
 		await this.page.exposeFunction("__mautrixSendEmailCredentials", this._sendEmailCredentials.bind(this))
 		await this.page.exposeFunction("__mautrixReceivePIN", this._receivePIN.bind(this))
 		await this.page.exposeFunction("__mautrixExpiry", this._receiveExpiry.bind(this))
-		/* TODO
 		await this.page.exposeFunction("__mautrixReceiveMessageID",
 			id => this.sentMessageIDs.add(id))
+		/* TODO
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
@@ -469,16 +469,35 @@ export default class MessagesPuppeteer {
 		}
 	}
 
+	// TODO Catch "An error has occurred" dialog
+	// 		Selector is just "dialog", then "button"
+	// 		Child of "#layer_contents"
+	// 		Always present, just made visible via classes
+
 	async _sendMessageUnsafe(chatID, text) {
 		await this._switchChatUnsafe(chatID)
-		await this.page.focus("mws-message-compose .input-box textarea")
-		await this.page.keyboard.type(text)
-		await this.page.click(".compose-container > mws-message-send-button > button")
-		const id = await this.page.$eval("mws-message-wrapper.outgoing[msg-id^='tmp_']",
-			elem => window.__mautrixController.waitForMessage(elem))
-		this.log("Successfully sent message", id, "to", chatID)
-		return id
+		const promise = this.page.evaluate(
+			() => window.__mautrixController.promiseOwnMessage())
+
+		const input = await this.page.$("#_chat_room_input")
+		await input.click()
+		await input.type(text)
+		await input.press("Enter")
+
+		try {
+			this.log("Waiting for message to be sent")
+			const id = await promise
+			this.log(`Successfully sent message ${id} to ${chatID}`)
+			return id
+		} catch (e) {
+			// TODO Handle a timeout better than this
+			this.error(`Timed out waiting for message to ${chatID}`)
+			return -1
+		}
 	}
+
+	// TODO Inbound read receipts
+	// 		Probably use a MutationObserver mapped to msgID
 
 	async _getMessagesUnsafe(id, minID = 0) {
 		/* TODO Also handle "decrypting" state

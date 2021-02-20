@@ -135,29 +135,51 @@ class MautrixController {
 		return messageData
 	}
 
-	waitForMessage(elem) {
-		return new Promise(resolve => {
-			let msgID = null
-			const observer = new MutationObserver(changes => {
-				for (const change of changes) {
-					if (change.type === "attributes" && change.attributeName === "msg-id") {
-						msgID = +elem.getAttribute("msg-id")
-						window.__mautrixReceiveMessageID(msgID)
-					} else if (change.type === "childList"
-						&& change.target.nodeName.toLowerCase() === "mws-relative-timestamp"
-						&& change.addedNodes.length > 0
-						&& change.addedNodes[0] instanceof Text) {
-						resolve(msgID)
-						observer.disconnect()
-						return
+
+	promiseOwnMessage() {
+		let observer
+		let msgID = -1
+		let resolve
+		let reject
+
+		const invisibleTimeCallback = (changes) => {
+			for (const change of changes) {
+				for (const addedNode of change.addedNodes) {
+					if (addedNode.classList.contains("mdRGT07Own")) {
+						const timeElement = addedNode.querySelector("time.MdNonDisp")
+						if (timeElement) {
+							msgID = addedNode.getAttribute("data-local-id")
+							observer.disconnect()
+							observer = new MutationObserver(visibleTimeCallback)
+							observer.observe(timeElement, { attributes: true, attributeFilter: ["class"] })
+							return
+						}
 					}
 				}
-			})
-			observer.observe(elem, { attributes: true, attributeFilter: ["msg-id"] })
-			observer.observe(elem.querySelector("mws-message-status"), {
-				childList: true,
-				subtree: true,
-			})
+			}
+		}
+
+		const visibleTimeCallback = (changes) => {
+			for (const change of changes) {
+				if (!change.target.classList.contains("MdNonDisp")) {
+					window.__mautrixReceiveMessageID(msgID)
+					observer.disconnect()
+					resolve(msgID)
+					return
+				}
+			}
+		}
+
+		observer = new MutationObserver(invisibleTimeCallback)
+		observer.observe(
+			document.querySelector("#_chat_room_msg_list"),
+			{ childList: true })
+
+		return new Promise((realResolve, realReject) => {
+			resolve = realResolve
+			reject = realReject
+			// TODO Handle a timeout better than this
+			setTimeout(() => { observer.disconnect(); reject() }, 10000)
 		})
 	}
 

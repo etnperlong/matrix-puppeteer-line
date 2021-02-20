@@ -127,10 +127,14 @@ class Portal(DBPortal, BasePortal):
             # TODO media
             return
         message_id = await sender.client.send(self.chat_id, text)
-        msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
-        await msg.insert()
-        await self._send_delivery_receipt(event_id)
-        self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
+        # TODO Handle message-send timeouts better
+        if message_id != -1:
+            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
+            await msg.insert()
+            await self._send_delivery_receipt(event_id)
+            self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
+        else:
+            self.log.warning(f"Handled Matrix message {event_id} -> {message_id}")
 
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         if self.is_direct:
@@ -355,20 +359,20 @@ class Portal(DBPortal, BasePortal):
                 "type": "m.room.related_groups",
                 "content": {"groups": [self.config["appservice.community_id"]]},
             })
-        initial_state.append({
-            "type": str(EventType.ROOM_POWER_LEVELS),
-            "content": {
-                "users": {
-                    self.az.bot_mxid: 100,
-                    self.main_intent.mxid: 9001,
-                },
-                "events": {},
-                "events_default": 100,
-                "state_default": 50,
-                "invite": 50,
-                "redact": 0
-            }
-        })
+        #initial_state.append({
+        #    "type": str(EventType.ROOM_POWER_LEVELS),
+        #    "content": {
+        #        "users": {
+        #            self.az.bot_mxid: 100,
+        #            self.main_intent.mxid: 100,
+        #        },
+        #        "events": {},
+        #        "events_default": 100,
+        #        "state_default": 50,
+        #        "invite": 50,
+        #        "redact": 0
+        #    }
+        #})
 
         # We lock backfill lock here so any messages that come between the room being created
         # and the initial backfill finishing wouldn't be bridged before the backfill messages.
