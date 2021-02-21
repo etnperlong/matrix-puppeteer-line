@@ -270,11 +270,12 @@ class MautrixController {
 	 * Parse a conversation list item element.
 	 *
 	 * @param {Element} element - The element to parse.
+	 * @param {null|string} knownId - The ID of this element, if it is known.
 	 * @return {ChatListInfo} - The info in the element.
 	 */
-	parseChatListItem(element) {
+	parseChatListItem(element, knownId) {
 		return {
-			id: this.getChatListItemId(element),
+			id: knownId || this.getChatListItemId(element),
 			name: this.getChatListItemName(element),
 			// TODO icon, but only for groups
 			lastMsg: this.getChatListItemLastMsg(element),
@@ -283,12 +284,12 @@ class MautrixController {
 	}
 
 	/**
-	 * Parse a mws-conversations-list .conv-container list.
-	 * @param {Element} element - The chat list element.
+	 * Parse the list of recent/saved chats.
 	 * @return {[ChatListInfo]} - The list of chats.
 	 */
-	parseChatList(element) {
-		return Array.from(element.children).map(
+	parseChatList() {
+		const chatList = document.querySelector("#_chat_list_body")
+		return Array.from(chatList.children).map(
 			child => this.parseChatListItem(child.firstElementChild))
 	}
 

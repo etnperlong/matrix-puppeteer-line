@@ -331,8 +331,8 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[ChatListInfo]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
-		return await this.page.$eval("#_chat_list_body",
-			elem => window.__mautrixController.parseChatList(elem))
+		return await this.page.evaluate(
+			() => window.__mautrixController.parseChatList())
 	}
 
 	/**
@@ -403,74 +403,70 @@ export default class MessagesPuppeteer {
 		return `#_chat_list_body div[data-chatid="${id}"]`
 	}
 
-	async _switchChatUnsafe(id) {
-		this.log("Switching to chat", id)
+	async _switchChat(id) {
+		this.log(`Switching to chat ${id}`)
 		const chatListItem = await this.page.$(this._listItemSelector(id))
-        await chatListItem.click()
-        return chatListItem
+		await chatListItem.click()
+
+		const chatHeader = await this.page.waitForSelector("#_chat_header_area > .mdRGT04Link")
+		const chatListInfo = await chatListItem.evaluate(
+			(e, id) => window.__mautrixController.parseChatListItem(e, id),
+			id)
+
+		this.log(`Waiting for chat header title to be "${chatListInfo.name}"`)
+		const chatHeaderTitleElement = await chatHeader.$(".mdRGT04Ttl")
+		await this.page.waitForFunction(
+			(element, targetText) => element.innerText == targetText,
+			{},
+			chatHeaderTitleElement, chatListInfo.name)
+
+		return [chatListItem, chatListInfo, chatHeader]
 	}
 
 	async _getChatInfoUnsafe(id) {
-        // TODO This will mark the chat as "read"!
-		const chatListItem = await this._switchChatUnsafe(id)
-        const chatHeader = await this.page.waitForSelector("#_chat_header_area > .mdRGT04Link")
+		let [isDirect, isGroup, isRoom] = [false,false,false]
+		switch (id.charAt(0)) {
+		case 'u':
+			isDirect = true
+			break
+		case 'c':
+			isGroup = true
+			break
+		case 'r':
+			isRoom = true
+			break
+		}
 
-		/* TODO Make this work
-		const chatListName = await chatListItem.evaluate(e => window.__mautrixController.getChatListItemName(e))
-		this.log(`Waiting for chat header title to be "${chatListName}"`)
-        const chatHeaderTitleElement = await chatHeader.$(".mdRGT04Ttl")
-        await this.page.waitForFunction((element, targetText) => {
-                element.innerText == targetText
-            },
-            {},
-            chatHeaderTitleElement, chatListName)
-		*/await this.page.waitForTimeout(3000)
+		// TODO This will mark the chat as "read"!
+		const [chatListItem, chatListInfo, chatHeader] = await this._switchChat(id)
 
-		this.log("Clicking chat header")
-		await chatHeader.click()
-		const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
-
-		this.log("Gathering participants")
 		let participants
-        const participantList = await chatDetailArea.$("ul.mdRGT13Ul")
-		if (participantList) {
-			// TODO Use "id" syntax to tell if this is a chat/room/group, not selectors:
-			// 		c: group
-			// 		r: room
-			// 		u: chat
-			// 		It's defined by the LINE API!
-			if (await chatDetailArea.$("#leaveGroup")) {
-				this.log("Found group")
-				// This is a *group* (like a Matrix room)
+		if (isGroup || isRoom) {
+			this.log("Found multi-user chat, so clicking chat header to get participants")
+			await chatHeader.click()
+			const participantList = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
+			if (isGroup) {
 				// TODO Is a group not actually created until a message is sent(?)
 				// 		If so, maybe don't create a portal until there is a message.
 				participants = await participantList.evaluate(
 					elem => window.__mautrixController.parseParticipantList(elem))
-			} else if (await chatDetailArea.$("ul [data-click-name='leave_room'")) {
-				this.log("Found room")
-				// This is a *room* (canonical multi-user DM)
-				// TODO Find a way to get participant IDs from a room member list!!
+			} else if (isRoom) {
+				this.log("TODO: Room participant lists don't have user IDs...")
 				participants = []
 			}
 		}
 		else
 		{
-			this.log("Found chat")
+			this.log(`Found direct chat with ${id}`)
+			//const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
-				id: id, // the ID of a 1:1 chat is the other user's member ID
-				name: await chatDetailArea.$eval(
-					"#_chat_contact_detail_view > a",
-					element => element.innerText),
+				id: id,
+				name: chatListInfo.name,
 			}]
-			// TODO Or just look up the member ID in the contact list?
 		}
 
-		return {
-				participants,
-				...await this.page.$eval(this._listItemSelector(id),
-						elem => window.__mautrixController.parseChatListItem(elem)),
-		}
+		return {participants, ...chatListInfo}
 	}
 
 	// TODO Catch "An error has occurred" dialog
@@ -479,7 +475,7 @@ export default class MessagesPuppeteer {
 	// 		Always present, just made visible via classes
 
 	async _sendMessageUnsafe(chatID, text) {
-		await this._switchChatUnsafe(chatID)
+		await this._switchChat(chatID)
 		const promise = this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage())
 
@@ -506,7 +502,7 @@ export default class MessagesPuppeteer {
 	async _getMessagesUnsafe(id, minID = 0) {
 		// TODO Also handle "decrypting" state
 		// TODO Handle unloaded messages. Maybe scroll up
-		await this._switchChatUnsafe(id)
+		await this._switchChat(id)
 		this.log("Waiting for messages to load")
 		const messages = await this.page.evaluate(
 			() => window.__mautrixController.parseMessageList())
