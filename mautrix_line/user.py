@@ -55,6 +55,7 @@ class User(DBUser, BaseUser):
         self._metric_value = defaultdict(lambda: False)
         self._connection_check_task = None
         self.client = None
+        self.intent = None
 
     @classmethod
     def init_cls(cls, bridge: 'MessagesBridge') -> None:
@@ -83,7 +84,7 @@ class User(DBUser, BaseUser):
                 self.log.warning("Failed to log in with shared secret")
                 return
             self.log.debug("Logged in with shared secret")
-            #self.intent = self.az.intent.user(self.mxid, access_token)
+            self.intent = self.az.intent.user(self.mxid, access_token)
         except Exception:
             self.log.exception("Error logging in with shared secret")
 

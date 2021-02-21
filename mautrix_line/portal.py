@@ -200,6 +200,7 @@ class Portal(DBPortal, BasePortal):
         return ReuploadedMediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
 
     async def update_info(self, conv: ChatInfo) -> None:
+        # TODO Not true: a single-participant chat could be a group!
         if len(conv.participants) == 1:
             self.other_user = conv.participants[0].id
             if self._main_intent is self.az.intent:
@@ -251,8 +252,7 @@ class Portal(DBPortal, BasePortal):
 
     async def backfill(self, source: 'u.User') -> None:
         with self.backfill_lock:
-            self.log.debug("Backfill: TODO!")
-            #await self._backfill(source)
+            await self._backfill(source)
 
     async def _backfill(self, source: 'u.User') -> None:
         self.log.debug("Backfilling history through %s", source.mxid)

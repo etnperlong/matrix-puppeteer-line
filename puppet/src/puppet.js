@@ -98,8 +98,8 @@ export default class MessagesPuppeteer {
 		/* TODO
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
-		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 		*/
+		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
 		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
 		this.loginRunning = false
@@ -504,14 +504,13 @@ export default class MessagesPuppeteer {
 	// 		Probably use a MutationObserver mapped to msgID
 
 	async _getMessagesUnsafe(id, minID = 0) {
-		/* TODO Also handle "decrypting" state
+		// TODO Also handle "decrypting" state
+		// TODO Handle unloaded messages. Maybe scroll up
 		await this._switchChatUnsafe(id)
 		this.log("Waiting for messages to load")
-		await this.page.waitFor("mws-message-wrapper")
-		const messages = await this.page.$eval("mws-messages-list .content",
-			element => window.__mautrixController.parseMessageList(element))
+		const messages = await this.page.evaluate(
+			() => window.__mautrixController.parseMessageList())
 		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
-		*/
 	}
 
 	async _processChatListChangeUnsafe(id) {

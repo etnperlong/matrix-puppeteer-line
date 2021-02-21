@@ -73,10 +73,7 @@ class MautrixController {
 	 */
 	async _tryParseDate(text, ref, option) {
 		const parsed = await window.__chronoParseDate(text, ref, option)
-		if (parsed) {
-			return new Date(parsed)
-		}
-		return null
+		return parsed ? new Date(parsed) : null
 	}
 
 	/**
@@ -86,14 +83,11 @@ class MautrixController {
 	 * @return {?Date} - The value in the date separator.
 	 * @private
 	 */
-	async _parseDate(text) {
+	async _tryParseDayDate(text) {
 		if (!text) {
 			return null
 		}
-		text = text
-			.replace(/[^\w\d\s,:.-]/g, "")
-			.replace(/\s{2,}/g, " ")
-			.trim()
+		text = text.replace(/\. /, "/")
 		const now = new Date()
 		let newDate = await this._tryParseDate(text)
 		if (!newDate || newDate > now) {
@@ -101,7 +95,7 @@ class MautrixController {
 			lastWeek.setDate(lastWeek.getDate() - 7)
 			newDate = await this._tryParseDate(text, lastWeek, { forwardDate: true })
 		}
-		return newDate <= now ? newDate : null
+		return newDate && newDate <= now ? newDate : null
 	}
 
 	/**
@@ -122,14 +116,18 @@ class MautrixController {
 	 * @return {MessageData}
 	 * @private
 	 */
-	_parseMessage(date, element) {
+	_tryParseMessage(date, element) {
 		const messageData = {
-			id: +element.getAttribute("msg-id"),
+			id: +element.getAttribute("data-local-id"),
 			timestamp: date ? date.getTime() : null,
-			is_outgoing: element.getAttribute("is-outgoing") === "true",
+			is_outgoing: element.classList.contains("mdRGT07Own"),
 		}
-		messageData.text = element.querySelector("mws-text-message-part .text-msg")?.innerText
-		if (element.querySelector("mws-image-message-part .image-msg")) {
+		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
+		if (messageElement.classList.contains("mdRGT07Text")) {
+			// TODO Use "Inner" or not?
+			messageData.text = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerText
+		} else if (messageElement.classList.contains("mdRGT07Image")) {
+			// TODO Doesn't this need to be a URL?
 			messageData.image = true
 		}
 		return messageData
@@ -148,7 +146,7 @@ class MautrixController {
 					if (addedNode.classList.contains("mdRGT07Own")) {
 						const timeElement = addedNode.querySelector("time.MdNonDisp")
 						if (timeElement) {
-							msgID = addedNode.getAttribute("data-local-id")
+							msgID = +addedNode.getAttribute("data-local-id")
 							observer.disconnect()
 							observer = new MutationObserver(visibleTimeCallback)
 							observer.observe(timeElement, { attributes: true, attributeFilter: ["class"] })
@@ -184,27 +182,29 @@ class MautrixController {
 	}
 
 	/**
-	 * Parse a message list in the given element. The element should probably be the .content div
-	 * inside a mws-message-list element.
+	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
-	 * @param {Element} element - The message list element.
 	 * @return {[MessageData]} - A list of messages.
 	 */
-	async parseMessageList(element) {
+	async parseMessageList() {
+		const msgList = document.querySelector("#_chat_room_msg_list")
 		const messages = []
-		let messageDate = null
-		for (const child of element.children) {
-			switch (child.tagName.toLowerCase()) {
-			case "mws-message-wrapper":
-				if (!child.getAttribute("msg-id").startsWith("tmp_")) {
-					messages.push(this._parseMessage(messageDate, child))
+		let refDate = null
+		for (const child of msgList.children) {
+			if (child.tagName == "DIV") {
+				if (child.classList.contains("mdRGT10Date")) {
+					refDate = await this._tryParseDayDate(child.firstElementChild.innerText)
 				}
-				break
-			case "mws-tombstone-message-wrapper":
-				messageDate = await this._parseDate(
-					child.querySelector("mws-relative-timestamp")?.innerText,
-				) || messageDate
-				break
+				else if (child.classList.contains("MdRGT07Cont")) {
+					// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
+					// 		but that is unlikely to be a problem here.
+					// 		Also, offscreen times may have .MdNonDisp on them
+					const timeElement = child.querySelector("time")
+					if (timeElement) {
+						const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
+						messages.push(this._tryParseMessage(messageDate, child))
+					}
+				}
 			}
 		}
 		return messages
