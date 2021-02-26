@@ -30,7 +30,7 @@ from . import commands as _
 
 
 class MessagesBridge(Bridge):
-    module = "mautrix_amp"
+    module = "mautrix_line"
     name = "mautrix-amp"
     command = "python -m mautrix-amp"
     description = ("A very hacky Matrix-SMS bridge based on using "

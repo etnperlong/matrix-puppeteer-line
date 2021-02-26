@@ -1,6 +1,6 @@
 import setuptools
 
-from mautrix_amp.get_version import git_tag, git_revision, version, linkified_version
+from mautrix_line.get_version import git_tag, git_revision, version, linkified_version
 
 with open("requirements.txt") as reqs:
     install_requires = reqs.read().splitlines()
@@ -23,7 +23,7 @@ try:
 except IOError:
     long_desc = "Failed to read README.md"
 
-with open("mautrix_amp/version.py", "w") as version_file:
+with open("mautrix_line/version.py", "w") as version_file:
     version_file.write(f"""# Generated in setup.py
 
 git_tag = {git_tag!r}
@@ -33,7 +33,7 @@ linkified_version = {linkified_version!r}
 """)
 
 setuptools.setup(
-    name="mautrix-amp",
+    name="mautrix-line",
     version=version,
     url="https://github.com/tulir/mautrix-amp",
 
@@ -60,10 +60,10 @@ setuptools.setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
     ],
-    package_data={"mautrix_amp": [
+    package_data={"mautrix_line": [
         "example-config.yaml",
     ]},
     data_files=[
-        (".", ["mautrix_amp/example-config.yaml"]),
+        (".", ["mautrix_line/example-config.yaml"]),
     ],
 )

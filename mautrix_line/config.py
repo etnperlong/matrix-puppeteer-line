@@ -25,7 +25,7 @@ Permissions = NamedTuple("Permissions", user=bool, admin=bool, level=str)
 class Config(BaseBridgeConfig):
     def __getitem__(self, key: str) -> Any:
         try:
-            return os.environ[f"MAUTRIX_AMP_{key.replace('.', '_').upper()}"]
+            return os.environ[f"MAUTRIX_LINE_{key.replace('.', '_').upper()}"]
         except KeyError:
             return super().__getitem__(key)
 
