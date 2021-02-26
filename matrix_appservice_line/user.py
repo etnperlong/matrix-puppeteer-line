@@ -124,7 +124,6 @@ class User(DBUser, BaseUser):
                 chat = await self.client.get_chat(chat.id)
                 if portal.mxid:
                     await portal.update_matrix_room(self, chat)
-                    await portal.backfill(self)
                 else:
                     await portal.create_matrix_room(self, chat)
 
@@ -145,10 +144,11 @@ class User(DBUser, BaseUser):
     async def handle_message(self, evt: Message) -> None:
         self.log.trace("Received message %s", evt)
         portal = await po.Portal.get_by_chat_id(evt.chat_id, create=True)
+        puppet = await pu.Puppet.get_by_mid(evt.sender.id) if not portal.is_direct else None
         if not portal.mxid:
             chat_info = await self.client.get_chat(evt.chat_id)
             await portal.create_matrix_room(self, chat_info)
-        await portal.handle_remote_message(self, evt)
+        await portal.handle_remote_message(self, puppet, evt)
 
     def _add_to_cache(self) -> None:
         self.by_mxid[self.mxid] = self

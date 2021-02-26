@@ -98,6 +98,7 @@ class Puppet(DBPuppet, BasePuppet):
 
     @classmethod
     async def get_by_mid(cls, mid: str, create: bool = True) -> Optional['Puppet']:
+        # TODO Might need to parse a real id from "_OWN"
         try:
             return cls.by_mid[mid]
         except KeyError:

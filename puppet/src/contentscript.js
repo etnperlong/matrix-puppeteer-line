@@ -51,15 +51,46 @@ window.__mautrixExpiry = function (button) {}
  * @return {Promise<void>}
  */
 window.__mautrixReceiveMessageID = function(id) {}
+/**
+ * @return {Promise<Element>}
+ */
+window.__mautrixGetParticipantsList = function() {}
+
+const ChatTypeEnum = Object.freeze({
+	DIRECT: 1,
+	GROUP: 2,
+	ROOM: 3,
+})
 
 class MautrixController {
-	constructor() {
+	constructor(ownID) {
 		this.chatListObserver = null
 		this.qrChangeObserver = null
 		this.qrAppearObserver = null
 		this.emailAppearObserver = null
 		this.pinAppearObserver = null
 		this.expiryObserver = null
+		this.ownID = null
+	}
+
+	setOwnID(ownID) {
+		// Remove characters that will conflict with mxid grammar
+		const suffix = ownID.slice(1).replace(":", "_ON_")
+		this.ownID = `_OWN_${suffix}`
+	}
+
+	// TODO Commonize with Node context
+	getChatType(id) {
+		switch (id.charAt(0)) {
+		case "u":
+			return ChatTypeEnum.DIRECT
+		case "c":
+			return ChatTypeEnum.GROUP
+		case "r":
+			return ChatTypeEnum.ROOM
+		default:
+			throw `Invalid chat ID: ${id}`
+		}
 	}
 
 	/**
@@ -99,11 +130,22 @@ class MautrixController {
 	}
 
 	/**
+	 * Try to match a user against an entry in the friends list to get their ID.
+	 *
+	 * @param {Element} element - The display name of the user to find the ID for.
+	 * @return {null|str}       - The user's ID if found.
+	 */
+	getUserIdFromFriendsList(senderName) {
+		return document.querySelector(`#contact_wrap_friends > ul > li[title='${senderName}']`)?.getAttribute("data-mid")
+	}
+
+	/**
 	 * @typedef MessageData
 	 * @type {object}
 	 * @property {number}  id          - The ID of the message. Seems to be sequential.
 	 * @property {number}  timestamp   - The unix timestamp of the message. Not very accurate.
 	 * @property {boolean} is_outgoing - Whether or not this user sent the message.
+	 * @property {null|Participant} sender - Full data of the participant who sent the message, if needed and available.
 	 * @property {string}  [text]      - The text in the message.
 	 * @property {string}  [image]     - The URL to the image in the message.
 	 */
@@ -113,14 +155,59 @@ class MautrixController {
 	 *
 	 * @param {Date}    date    - The most recent date indicator.
 	 * @param {Element} element - The message element.
+	 * @param {int} chatType    - What kind of chat this message is part of.
 	 * @return {MessageData}
 	 * @private
 	 */
-	_tryParseMessage(date, element) {
+	async _tryParseMessage(date, element, chatType) {
+		const is_outgoing = element.classList.contains("mdRGT07Own")
+		let sender = {}
+
+		// TODO Clean up participantsList access...
+		const participantsListSelector = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
+
+		// Don't need sender ID for direct chats, since the portal will have it already.
+		if (chatType == ChatTypeEnum.DIRECT) {
+			sender = null
+		} else if (!is_outgoing) {
+			sender.name = element.querySelector(".mdRGT07Body > .mdRGT07Ttl").innerText
+			// Room members are always friends (right?),
+			// so search the friend list for the sender's name
+			// and get their ID from there.
+			// TODO For rooms, allow creating Matrix puppets in case
+			//      a message is sent by someone who since left the
+			//      room and never had a puppet made for them yet.
+			sender.id = this.getUserIdFromFriendsList(sender.name)
+			// Group members aren't necessarily friends,
+			// but the participant list includes their ID.
+			if (!sender.id) {
+				await window.__mautrixShowParticipantsList()
+				const participantsList = document.querySelector(participantsListSelector)
+				sender.id = participantsList.querySelector(`img[alt='${senderName}'`).parentElement.parentElement.getAttribute("data-mid")
+			}
+			// TODO Avatar
+		} else {
+			// TODO Get own ID and store it somewhere appropriate.
+			//      Unable to get own ID from a room chat...
+			// if (chatType == ChatTypeEnum.GROUP) {
+			// 	await window.__mautrixShowParticipantsList()
+			// 	const participantsList = document.querySelector("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
+			// 	// TODO The first member is always yourself, right?
+			// 	// TODO Cache this so own ID can be used later
+			// 	sender = participantsList.children[0].getAttribute("data-mid")
+			// }
+			await window.__mautrixShowParticipantsList()
+			const participantsList = document.querySelector(participantsListSelector)
+			sender.name = this.getParticipantListItemName(participantsList.children[0])
+			// TODO avatar
+			sender.id = this.ownID
+		}
+
 		const messageData = {
 			id: +element.getAttribute("data-local-id"),
 			timestamp: date ? date.getTime() : null,
-			is_outgoing: element.classList.contains("mdRGT07Own"),
+			is_outgoing: is_outgoing,
+			sender: sender,
 		}
 		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
 		if (messageElement.classList.contains("mdRGT07Text")) {
@@ -184,9 +271,14 @@ class MautrixController {
 	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
+	 * @param {null|string} chatId - The ID of the currently-viewed chat, if known.
 	 * @return {[MessageData]} - A list of messages.
 	 */
-	async parseMessageList() {
+	async parseMessageList(chatId) {
+		if (!chatId) {
+			chatId = this.getChatListItemId(document.querySelector("#_chat_list_body > .ExSelected > div"))
+		}
+		const chatType = this.getChatType(chatId);
 		const msgList = document.querySelector("#_chat_room_msg_list")
 		const messages = []
 		let refDate = null
@@ -202,7 +294,7 @@ class MautrixController {
 					const timeElement = child.querySelector("time")
 					if (timeElement) {
 						const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
-						messages.push(this._tryParseMessage(messageDate, child))
+						messages.push(await this._tryParseMessage(messageDate, child, chatType))
 					}
 				}
 			}
@@ -218,6 +310,15 @@ class MautrixController {
 	 * @property {string} name - The contact list name of the participant
 	 */
 
+	getParticipantListItemName(element) {
+		return element.querySelector(".mdRGT13Ttl").innerText
+	}
+
+	getParticipantListItemId(element) {
+		// TODO Cache own ID
+		return element.getAttribute("data-mid")
+	}
+
 	/**
 	 * Parse a group participants list.
 	 * TODO Find what works for a *room* participants list...!
@@ -226,16 +327,26 @@ class MautrixController {
 	 * @return {[Participant]} - The list of participants.
 	 */
 	parseParticipantList(element) {
-		// TODO Slice to exclude first member, which is always yourself (right?)
-		// TODO Only slice if double-puppeting is enabled!
-		//return Array.from(element.children).slice(1).map(child => {
-		return Array.from(element.children).map(child => {
+		// TODO Might need to explicitly exclude own user if double-puppeting is enabled.
+		// TODO The first member is always yourself, right?
+		const ownParticipant = {
+			// TODO Find way to make this work with multiple mxids using the bridge.
+			//      One idea is to add real ID as suffix if we're in a group, and
+			//      put in the puppet DB table somehow.
+			id: this.ownID,
+			// TODO avatar: child.querySelector("img").src,
+			name: this.getParticipantListItemName(element.children[0]),
+		}
+
+		return [ownParticipant].concat(Array.from(element.children).slice(1).map(child => {
+			const name = this.getParticipantListItemName(child)
+			const id = this.getParticipantListItemId(child) || this.getUserIdFromFriendsList(name)
 			return {
-				id: child.getAttribute("data-mid"),
+				id: id, // NOTE Don't want non-own user's ID to ever be null.
 				// TODO avatar: child.querySelector("img").src,
-				name: child.querySelector(".mdRGT13Ttl").innerText,
+				name: name,
 			}
-		})
+		}))
 	}
 
 	/**

@@ -29,7 +29,7 @@ export default class MessagesPuppeteer {
 	static noSandbox = false
 	static viewport = { width: 960, height: 880 }
 	static url = undefined
-	static extensionDir = 'extension_files'
+	static extensionDir = "extension_files"
 
 	/**
 	 *
@@ -56,6 +56,14 @@ export default class MessagesPuppeteer {
 
 	error(...text) {
 		console.error(`[Puppeteer/${this.id}]`, ...text)
+	}
+
+	/**
+	 * Get the inner text of an element.
+	 * To be called in browser context.
+	 */
+	_getInnerText(element) {
+		return element?.innerText
 	}
 
 	/**
@@ -97,6 +105,7 @@ export default class MessagesPuppeteer {
 			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
+		await this.page.exposeFunction("__mautrixShowParticipantsList", this._showParticipantList.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
 		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
@@ -204,11 +213,12 @@ export default class MessagesPuppeteer {
 					return value
 				}),
 			() => this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
-				.then(value => this.page.evaluate(element => element.innerText, value)),
+				.then(value => this.page.evaluate(_getInnerText, value)),
 			() => this._waitForLoginCancel(),
 		].map(promiseFn => cancelableResolve(promiseFn)))
 
 		this.log("Removing observers")
+		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.id)
 		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
@@ -402,68 +412,99 @@ export default class MessagesPuppeteer {
 	}
 
 	async _switchChat(id) {
+		// TODO Allow passing in an element directly
 		this.log(`Switching to chat ${id}`)
 		const chatListItem = await this.page.$(this._listItemSelector(id))
-		await chatListItem.click()
 
-		const chatHeader = await this.page.waitForSelector("#_chat_header_area > .mdRGT04Link")
-		const chatListInfo = await chatListItem.evaluate(
-			(e, id) => window.__mautrixController.parseChatListItem(e, id),
-			id)
+		const chatName = await chatListItem.evaluate(
+			element => window.__mautrixController.getChatListItemName(element))
 
-		this.log(`Waiting for chat header title to be "${chatListInfo.name}"`)
-		const chatHeaderTitleElement = await chatHeader.$(".mdRGT04Ttl")
-		await this.page.waitForFunction(
-			(element, targetText) => element.innerText == targetText,
-			{},
-			chatHeaderTitleElement, chatListInfo.name)
+		const isCorrectChatVisible = (targetText) => {
+			const chatHeader = document.querySelector("#_chat_header_area > .mdRGT04Link")
+			if (!chatHeader) return false
+			const chatHeaderTitleElement = chatHeader.querySelector(".mdRGT04Ttl")
+			return chatHeaderTitleElement.innerText == targetText
+		}
 
-		return [chatListItem, chatListInfo, chatHeader]
+		if (await this.page.evaluate(isCorrectChatVisible, chatName)) {
+			this.log("Already viewing chat, no need to switch")
+		} else {
+			await chatListItem.click()
+			this.log(`Waiting for chat header title to be "${chatName}"`)
+			await this.page.waitForFunction(
+				isCorrectChatVisible,
+				{polling: "mutation"},
+				chatName)
+
+			// For consistent behaviour later, wait for the chat details sidebar to be hidden
+			await this.page.waitForFunction(
+				detailArea => detailArea.childElementCount == 0,
+				{},
+				await this.page.$("#_chat_detail_area"))
+		}
+	}
+
+	// TODO Commonize
+	async getParticipantList() {
+		await this._showParticipantList()
+		return await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
+	}
+
+	async _showParticipantList() {
+		const selector = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
+		let participantList = await this.page.$(selector)
+		if (!participantList) {
+			this.log("Participant list hidden, so clicking chat header to show it")
+			await this.page.click("#_chat_header_area > .mdRGT04Link")
+			participantList = await this.page.waitForSelector(selector)
+		}
+		//return participantList
 	}
 
 	async _getChatInfoUnsafe(id) {
+		const chatListItem = await this.page.$(this._listItemSelector(id))
+		const chatListInfo = await chatListItem.evaluate(
+			(element, id) => window.__mautrixController.parseChatListItem(element, id),
+			id)
+
 		let [isDirect, isGroup, isRoom] = [false,false,false]
 		switch (id.charAt(0)) {
-		case 'u':
+		case "u":
 			isDirect = true
 			break
-		case 'c':
+		case "c":
 			isGroup = true
 			break
-		case 'r':
+		case "r":
 			isRoom = true
 			break
 		}
 
-		// TODO This will mark the chat as "read"!
-		const [chatListItem, chatListInfo, chatHeader] = await this._switchChat(id)
-
 		let participants
-		if (isGroup || isRoom) {
+		if (!isDirect) {
 			this.log("Found multi-user chat, so clicking chat header to get participants")
-			await chatHeader.click()
-			const participantList = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
-			if (isGroup) {
-				// TODO Is a group not actually created until a message is sent(?)
-				// 		If so, maybe don't create a portal until there is a message.
-				participants = await participantList.evaluate(
-					elem => window.__mautrixController.parseParticipantList(elem))
-			} else if (isRoom) {
-				this.log("TODO: Room participant lists don't have user IDs...")
-				participants = []
-			}
-		}
-		else
-		{
+			// TODO This will mark the chat as "read"!
+			await this._switchChat(id)
+			const participantList = await this.getParticipantList()
+			// TODO Is a group not actually created until a message is sent(?)
+			// 		If so, maybe don't create a portal until there is a message.
+			participants = await participantList.evaluate(
+				element => window.__mautrixController.parseParticipantList(element))
+		} else {
 			this.log(`Found direct chat with ${id}`)
 			//const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
 				id: id,
+				// TODO avatar, or leave null since this is a 1:1 chat
 				name: chatListInfo.name,
 			}]
 		}
 
+		this.log("Found participants:")
+		for (const participant of participants) {
+			this.log(participant)
+		}
 		return {participants, ...chatListInfo}
 	}
 
@@ -504,7 +545,7 @@ export default class MessagesPuppeteer {
 		await this._switchChat(id)
 		this.log("Waiting for messages to load")
 		const messages = await this.page.evaluate(
-			() => window.__mautrixController.parseMessageList())
+			id => window.__mautrixController.parseMessageList(id), id)
 		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
 	}
 
@@ -582,7 +623,7 @@ export default class MessagesPuppeteer {
 
 	_sendLoginFailure(reason) {
 		this.loginRunning = false
-		this.error(`Login failure: ${reason ? reason : 'cancelled'}`)
+		this.error(`Login failure: ${reason ? reason : "cancelled"}`)
 		if (this.client) {
 			this.client.sendFailure(reason).catch(err =>
 				this.error("Failed to send failure reason to client:", err))

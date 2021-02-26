@@ -58,6 +58,7 @@ class Config(BaseBridgeConfig):
         copy("bridge.displayname_max_length")
 
         copy("bridge.initial_conversation_sync")
+        copy("bridge.invite_own_puppet_to_pm")
         copy("bridge.login_shared_secret")
         copy("bridge.federate_rooms")
         copy("bridge.backfill.invite_own_puppet")

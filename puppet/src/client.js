@@ -99,7 +99,7 @@ export default class Client {
 	}
 
 	sendMessage(message) {
-		this.log("Sending", message, "to client")
+		this.log(`Sending message ${message.id} to client`)
 		return this._write({
 			id: --this.notificationID,
 			command: "message",
@@ -204,7 +204,9 @@ export default class Client {
 			this.log("Ignoring old request", req.id)
 			return
 		}
-		this.log("Received request", req.id, "with command", req.command)
+		if (req.command != "is_connected") {
+			this.log("Received request", req.id, "with command", req.command)
+		}
 		this.maxCommandID = req.id
 		let handler
 		if (!this.userID) {

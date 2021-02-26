@@ -35,6 +35,7 @@ class ChatListInfo(SerializableAttrs['ChatListInfo']):
 @dataclass
 class Participant(SerializableAttrs['Participant']):
     id: str
+    # TODO avatar: str
     name: str
 
 
@@ -48,6 +49,7 @@ class Message(SerializableAttrs['Message']):
     id: int
     chat_id: int
     is_outgoing: bool
+    sender: Optional[Participant]
     timestamp: int = None
     text: Optional[str] = None
     image: Optional[str] = None

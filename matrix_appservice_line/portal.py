@@ -22,7 +22,7 @@ import magic
 from mautrix.appservice import AppService, IntentAPI
 from mautrix.bridge import BasePortal, NotificationDisabler
 from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, MessageType,
-                           TextMessageEventContent, MediaMessageEventContent,
+                           TextMessageEventContent, MediaMessageEventContent, Membership,
                            ContentURI, EncryptedFile)
 from mautrix.errors import MatrixError
 from mautrix.util.simple_lock import SimpleLock
@@ -49,6 +49,7 @@ ReuploadedMediaInfo = NamedTuple('ReuploadedMediaInfo', mxc=Optional[ContentURI]
 
 
 class Portal(DBPortal, BasePortal):
+    invite_own_puppet_to_pm: bool = False
     by_mxid: Dict[RoomID, 'Portal'] = {}
     by_chat_id: Dict[int, 'Portal'] = {}
     config: Config
@@ -59,8 +60,6 @@ class Portal(DBPortal, BasePortal):
     _create_room_lock: asyncio.Lock
     backfill_lock: SimpleLock
     _last_participant_update: Set[str]
-
-    _main_intent: IntentAPI
 
     def __init__(self, chat_id: int, other_user: Optional[str] = None,
                  mxid: Optional[RoomID] = None, name: Optional[str] = None, encrypted: bool = False
@@ -77,7 +76,15 @@ class Portal(DBPortal, BasePortal):
 
     @property
     def is_direct(self) -> bool:
-        return self.other_user is not None
+        return self.chat_id[0] == "u"
+
+    @property
+    def is_group(self) -> bool:
+        return self.chat_id[0] == "c"
+
+    @property
+    def is_room(self) -> bool:
+        return self.chat_id[0] == "r"
 
     @property
     def main_intent(self) -> IntentAPI:
@@ -92,6 +99,7 @@ class Portal(DBPortal, BasePortal):
         cls.az = bridge.az
         cls.loop = bridge.loop
         cls.bridge = bridge
+        cls.invite_own_puppet_to_pm = cls.config["bridge.invite_own_puppet_to_pm"]
         NotificationDisabler.puppet_cls = p.Puppet
         NotificationDisabler.config_enabled = cls.config["bridge.backfill.disable_notifications"]
 
@@ -145,17 +153,39 @@ class Portal(DBPortal, BasePortal):
             self.log.debug(f"{user.mxid} left portal to {self.chat_id}")
             # TODO cleanup if empty
 
-    async def handle_remote_message(self, source: 'u.User', evt: Message) -> None:
+    async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
+                                     invite: bool = True) -> Optional[IntentAPI]:
+        # Use bridge bot as puppet for own user when puppet for own user is unavailable
+        # TODO Use own LINE puppet instead, if it's available
+        intent = sender.intent if sender else self.az.intent
+        if self.is_direct and (sender is None or sender.mid == source.mid and not sender.is_real_user):
+            if self.invite_own_puppet_to_pm and invite:
+                await self.main_intent.invite_user(self.mxid, intent.mxid)
+            elif await self.az.state_store.get_membership(self.mxid,
+                                                          intent.mxid) != Membership.JOIN:
+                self.log.warning(f"Ignoring own {mid} in private chat because own puppet is not in"
+                                 " room.")
+                intent = None
+        return intent
+
+    async def handle_remote_message(self, source: 'u.User', sender: Optional['p.Puppet'],
+                                    evt: Message) -> None:
         if evt.is_outgoing:
-            if not source.intent:
-                self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
-                return
-            intent = source.intent
+            if source.intent:
+                intent = source.intent
+            else:
+                if not self.invite_own_puppet_to_pm:
+                    self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
+                    return
+                intent = await self._bridge_own_message_pm(source, sender, f"message {evt.id}")
+                if not intent:
+                    return
         elif self.other_user:
             intent = (await p.Puppet.get_by_mid(self.other_user)).intent
+        elif sender:
+            intent = sender.intent
         else:
-            # TODO group chats
-            self.log.warning(f"Ignoring message {evt.id}: group chats aren't supported yet")
+            self.log.warning(f"Ignoring message {evt.id}: sender puppet is unavailable")
             return
 
         if await DBMessage.get_by_mid(evt.id):
@@ -200,19 +230,22 @@ class Portal(DBPortal, BasePortal):
         return ReuploadedMediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
 
     async def update_info(self, conv: ChatInfo) -> None:
-        # TODO Not true: a single-participant chat could be a group!
-        if len(conv.participants) == 1:
+        if self.is_direct:
             self.other_user = conv.participants[0].id
             if self._main_intent is self.az.intent:
                 self._main_intent = (await p.Puppet.get_by_mid(self.other_user)).intent
         for participant in conv.participants:
             puppet = await p.Puppet.get_by_mid(participant.id)
             await puppet.update_info(participant)
-        changed = await self._update_name(conv.name)
+        # TODO Consider setting no room name for non-group chats.
+        #      But then the LINE bot itself may appear in the title...
+        changed = await self._update_name(f"{conv.name} (LINE)")
         if changed:
             await self.update_bridge_info()
             await self.update()
-        await self._update_participants(conv.participants)
+        # NOTE Don't call this yet, lest puppets join earlier than
+        #      when their user actually joined or sent a message.
+        #await self._update_participants(conv.participants)
 
     async def _update_name(self, name: str) -> bool:
         if self.name != name:
@@ -251,8 +284,11 @@ class Portal(DBPortal, BasePortal):
                                                  reason="User had left this chat")
 
     async def backfill(self, source: 'u.User') -> None:
-        with self.backfill_lock:
-            await self._backfill(source)
+        try:
+            with self.backfill_lock:
+                await self._backfill(source)
+        except Exception:
+            self.log.exception("Failed to backfill portal")
 
     async def _backfill(self, source: 'u.User') -> None:
         self.log.debug("Backfilling history through %s", source.mxid)
@@ -267,8 +303,15 @@ class Portal(DBPortal, BasePortal):
 
         self.log.debug("Got %d messages from server", len(messages))
         async with NotificationDisabler(self.mxid, source):
+            # Member joins/leaves are not shown in chat history.
+            # Best we can do is have a puppet join if its user had sent a message.
+            members_known = set(await self.main_intent.get_room_members(self.mxid)) if not self.is_direct else None
             for evt in messages:
-                await self.handle_remote_message(source, evt)
+                puppet = await p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
+                if puppet and evt.sender.id not in members_known:
+                    await puppet.update_info(evt.sender)
+                    members_known.add(evt.sender.id)
+                await self.handle_remote_message(source, puppet, evt)
         self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
 
     @property
@@ -325,6 +368,8 @@ class Portal(DBPortal, BasePortal):
             await puppet.az.intent.ensure_joined(self.mxid)
 
         await self.update_info(info)
+        await self.backfill(source)
+        await self._update_participants(info.participants)
 
     async def _create_matrix_room(self, source: 'u.User', info: ChatInfo) -> Optional[RoomID]:
         if self.mxid:
@@ -352,8 +397,10 @@ class Portal(DBPortal, BasePortal):
             })
             if self.is_direct:
                 invites.append(self.az.bot_mxid)
-        if self.encrypted or not self.is_direct:
-            name = self.name
+        # NOTE Set the room title even for direct chats, because
+        #      the LINE bot itself may appear in the title otherwise.
+        #if self.encrypted or not self.is_direct:
+        name = self.name
         if self.config["appservice.community_id"]:
             initial_state.append({
                 "type": "m.room.related_groups",
@@ -394,6 +441,11 @@ class Portal(DBPortal, BasePortal):
             self.log.debug(f"Matrix room created: {self.mxid}")
             self.by_mxid[self.mxid] = self
             if not self.is_direct:
+                # For multi-user chats, backfill before updating participants,
+                # to act as as a best guess of when users actually joined.
+                # No way to tell when a user actually left, so just check the
+                # participants list after backfilling.
+                await self.backfill(source)
                 await self._update_participants(info.participants)
             else:
                 puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
@@ -403,11 +455,7 @@ class Portal(DBPortal, BasePortal):
                     except MatrixError:
                         self.log.debug("Failed to join custom puppet into newly created portal",
                                        exc_info=True)
-
-            try:
                 await self.backfill(source)
-            except Exception:
-                self.log.exception("Failed to backfill new portal")
 
         return self.mxid
 
