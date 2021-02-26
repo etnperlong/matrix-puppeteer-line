@@ -95,10 +95,8 @@ export default class MessagesPuppeteer {
 		await this.page.exposeFunction("__mautrixExpiry", this._receiveExpiry.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveMessageID",
 			id => this.sentMessageIDs.add(id))
-		/* TODO
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
-		*/
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
 		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
@@ -390,8 +388,8 @@ export default class MessagesPuppeteer {
 
 	async startObserving() {
 		this.log("Adding chat list observer")
-		await this.page.$eval("#_chat_list_body",
-			element => window.__mautrixController.addChatListObserver(element))
+		await this.page.evaluate(
+			() => window.__mautrixController.addChatListObserver())
 	}
 
 	async stopObserving() {
@@ -502,6 +500,7 @@ export default class MessagesPuppeteer {
 	async _getMessagesUnsafe(id, minID = 0) {
 		// TODO Also handle "decrypting" state
 		// TODO Handle unloaded messages. Maybe scroll up
+		// TODO This will mark the chat as "read"!
 		await this._switchChat(id)
 		this.log("Waiting for messages to load")
 		const messages = await this.page.evaluate(

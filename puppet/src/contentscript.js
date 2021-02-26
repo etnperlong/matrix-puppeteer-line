@@ -274,7 +274,7 @@ class MautrixController {
 	 * @return {ChatListInfo} - The info in the element.
 	 */
 	parseChatListItem(element, knownId) {
-		return {
+		return !element.classList.contains("chatList") ? null : {
 			id: knownId || this.getChatListItemId(element),
 			name: this.getChatListItemName(element),
 			// TODO icon, but only for groups
@@ -294,6 +294,7 @@ class MautrixController {
 	}
 
 	/**
+	 * TODO
 	 * Check if an image has been downloaded.
 	 *
 	 * @param {number} id - The ID of the message whose image to check.
@@ -307,6 +308,7 @@ class MautrixController {
 	}
 
 	/**
+	 * TODO
 	 * Download an image and return it as a data URL.
 	 * Used for downloading the blob: URLs in image messages.
 	 *
@@ -331,18 +333,32 @@ class MautrixController {
 	 * @private
 	 */
 	_observeChatListMutations(mutations) {
-		/* TODO
+		// TODO Observe *added/removed* chats, not just new messages
 		const changedChatIDs = new Set()
 		for (const change of mutations) {
 			console.debug("Chat list mutation:", change)
-			if (!(change.target instanceof Element)
-				|| change.target.tagName.toLowerCase() === "mws-conversation-list-item-menu") {
-				console.debug("Ignoring chat list mutation:", change.target instanceof Element)
-				continue
+			if (change.target.id == "_chat_list_body") {
+				// TODO
+				// These could be new chats, or they're
+				// existing ones that just moved around.
+				/*
+				for (const node of change.addedNodes) {
+				}
+				*/
 			}
-			const chat = this.parseChatListItem(change.target.closest("mws-conversation-list-item"))
-			console.debug("Changed chat list item:", chat)
-			changedChatIDs.add(chat.id)
+			else if (change.target.tagName == "LI")
+			{
+				for (const node of change.addedNodes) {
+					const chat = this.parseChatListItem(node)
+					if (chat) {
+						console.debug("Changed chat list item:", chat)
+						changedChatIDs.add(chat.id)
+					} else {
+						console.debug("Could not parse node as a chat list item:", node)
+					}
+				}
+			}
+			// change.removedNodes tells you which chats that had notifications are now read.
 		}
 		if (changedChatIDs.size > 0) {
 			console.debug("Dispatching chat list mutations:", changedChatIDs)
@@ -350,28 +366,25 @@ class MautrixController {
 				() => console.debug("Chat list mutations dispatched"),
 				err => console.error("Error dispatching chat list mutations:", err))
 		}
-		*/
 	}
 
 	/**
-	 * Add a mutation observer to the given element.
-	 *
-	 * @param {Element} element - The DOM element to add the mutation observer to.
+	 * Add a mutation observer to the chat list.
 	 */
-	addChatListObserver(element) {
+	addChatListObserver() {
 		if (this.chatListObserver !== null) {
 			this.removeChatListObserver()
 		}
 		this.chatListObserver = new MutationObserver(mutations => {
-			/* TODO
 			try {
 				this._observeChatListMutations(mutations)
 			} catch (err) {
 				console.error("Error observing chat list mutations:", err)
 			}
-			*/
 		})
-		this.chatListObserver.observe(element, { childList: true, subtree: true })
+		this.chatListObserver.observe(
+			document.querySelector("#_chat_list_body"),
+			{ childList: true, subtree: true })
 		console.debug("Started chat list observer")
 	}
 
