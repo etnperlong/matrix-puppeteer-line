@@ -35,7 +35,7 @@ linkified_version = {linkified_version!r}
 setuptools.setup(
     name="mautrix-line",
     version=version,
-    url="https://github.com/tulir/mautrix-amp",
+    url="git://miscworks.net/mautrix-line",
 
     author="Tulir Asokan",
     author_email="tulir@maunium.net",

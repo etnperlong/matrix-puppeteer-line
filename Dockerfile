@@ -31,19 +31,19 @@ RUN apk add --no-cache \
   chmod +x yq && mv yq /usr/bin/yq
 
 
-COPY requirements.txt /opt/mautrix-amp/requirements.txt
-COPY optional-requirements.txt /opt/mautrix-amp/optional-requirements.txt
-WORKDIR /opt/mautrix-amp
+COPY requirements.txt /opt/mautrix-line/requirements.txt
+COPY optional-requirements.txt /opt/mautrix-line/optional-requirements.txt
+WORKDIR /opt/mautrix-line
 RUN apk add --virtual .build-deps python3-dev libffi-dev build-base \
  && pip3 install -r requirements.txt -r optional-requirements.txt \
  && apk del .build-deps
 
-COPY . /opt/mautrix-amp
+COPY . /opt/mautrix-line
 RUN apk add git && pip3 install .[e2be] && apk del git \
   # This doesn't make the image smaller, but it's needed so that the `version` command works properly
-  && cp mautrix_amp/example-config.yaml . && rm -rf mautrix_amp
+  && cp mautrix_line/example-config.yaml . && rm -rf mautrix_line
 
 VOLUME /data
 ENV UID=1337 GID=1337
 
-CMD ["/opt/mautrix-amp/docker-run.sh"]
+CMD ["/opt/mautrix-line/docker-run.sh"]

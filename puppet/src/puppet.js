@@ -1,5 +1,5 @@
-// mautrix-amp - A very hacky Matrix-SMS bridge based on using Android Messages for Web in Puppeteer
-// Copyright (C) 2020 Tulir Asokan
+// mautrix-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+// Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by

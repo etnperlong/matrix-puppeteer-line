@@ -1,16 +1,16 @@
 {
-  "name": "mautrix-amp-puppeteer",
+  "name": "mautrix-line-puppeteer",
   "version": "0.1.0",
-  "description": "Puppeteer module for mautrix-amp",
+  "description": "Puppeteer module for mautrix-line",
   "repository": {
     "type": "git",
-    "url": "git+https://mau.dev/tulir/mautrix-amp.git"
+    "url": "git://miscworks.net/mautrix-line.git"
   },
   "type": "module",
   "main": "src/main.js",
-  "author": "Tulir Asokan <tulir@maunium.net>",
+  "author": "Andrew Ferrazzutti <fair@miscworks.net>",
   "license": "AGPL-3.0-or-later",
-  "homepage": "https://mau.dev/tulir/mautrix-amp",
+  "homepage": "https://miscworks.net/dir/mautrix-line",
   "scripts": {
     "start": "node ./src/main.js"
   },

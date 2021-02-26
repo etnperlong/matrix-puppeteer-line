@@ -1,5 +1,4 @@
-# mautrix-amp
-A very hacky Matrix-SMS bridge based on running Android Messages for Web in Puppeteer.
-This project is temporary and will eventually be replaced by a separate Android app.
+# mautrix-line
+A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 
-Matrix room: [`#maunium:maunium.net`](https://matrix.to/#/#maunium:maunium.net)
+Matrix room: [`#mautrix-line:miscworks.net`](https://matrix.to/#/#matrix-line:miscworks.net)
