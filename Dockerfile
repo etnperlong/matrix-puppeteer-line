@@ -31,19 +31,19 @@ RUN apk add --no-cache \
   chmod +x yq && mv yq /usr/bin/yq
 
 
-COPY requirements.txt /opt/mautrix-line/requirements.txt
-COPY optional-requirements.txt /opt/mautrix-line/optional-requirements.txt
-WORKDIR /opt/mautrix-line
+COPY requirements.txt /opt/matrix-appservice-line/requirements.txt
+COPY optional-requirements.txt /opt/matrix-appservice-line/optional-requirements.txt
+WORKDIR /opt/matrix-appservice-line
 RUN apk add --virtual .build-deps python3-dev libffi-dev build-base \
  && pip3 install -r requirements.txt -r optional-requirements.txt \
  && apk del .build-deps
 
-COPY . /opt/mautrix-line
+COPY . /opt/matrix-appservice-line
 RUN apk add git && pip3 install .[e2be] && apk del git \
   # This doesn't make the image smaller, but it's needed so that the `version` command works properly
-  && cp mautrix_line/example-config.yaml . && rm -rf mautrix_line
+  && cp matrix_appservice_line/example-config.yaml . && rm -rf matrix_appservice_line
 
 VOLUME /data
 ENV UID=1337 GID=1337
 
-CMD ["/opt/mautrix-line/docker-run.sh"]
+CMD ["/opt/matrix-appservice-line/docker-run.sh"]

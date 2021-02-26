@@ -1,4 +1,4 @@
-# mautrix-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+# matrix-appservice-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 # Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,32 +17,33 @@ from typing import Optional, ClassVar, TYPE_CHECKING
 
 from attr import dataclass
 
+from mautrix.types import UserID, RoomID
 from mautrix.util.async_db import Database
 
 fake_db = Database("") if TYPE_CHECKING else None
 
 
 @dataclass
-class Puppet:
+class User:
     db: ClassVar[Database] = fake_db
 
-    mid: str
-    name: Optional[str]
-    # TODO avatar: Optional[str]
-    is_registered: bool
+    mxid: UserID
+    notice_room: Optional[RoomID]
 
     async def insert(self) -> None:
-        q = "INSERT INTO puppet (mid, name, is_registered) VALUES ($1, $2, $3)"
-        await self.db.execute(q, self.mid, self.name, self.is_registered)
+        q = ('INSERT INTO "user" (mxid, notice_room) '
+             'VALUES ($1, $2)')
+        await self.db.execute(q, self.mxid, self.notice_room)
 
     async def update(self) -> None:
-        q = "UPDATE puppet SET name=$2, is_registered=$3 WHERE mid=$1"
-        await self.db.execute(q, self.mid, self.name, self.is_registered)
+        await self.db.execute('UPDATE "user" SET notice_room=$2 WHERE mxid=$1',
+                              self.mxid, self.notice_room)
 
     @classmethod
-    async def get_by_mid(cls, mid: str) -> Optional['Puppet']:
-        row = await cls.db.fetchrow("SELECT mid, name, is_registered FROM puppet WHERE mid=$1",
-                                    mid)
+    async def get_by_mxid(cls, mxid: UserID) -> Optional['User']:
+        q = ("SELECT mxid, notice_room "
+             'FROM "user" WHERE mxid=$1')
+        row = await cls.db.fetchrow(q, mxid)
         if not row:
             return None
         return cls(**row)

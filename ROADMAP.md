@@ -34,5 +34,5 @@
 * Replies
 * Voice messages
 
-### Missing from mautrix-line
+### Missing from matrix-appservice-line
 * TODO

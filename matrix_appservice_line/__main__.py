@@ -1,4 +1,4 @@
-# mautrix-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+# matrix-appservice-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 # Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 #
 # This program is free software: you can redistribute it and/or modify
@@ -30,12 +30,12 @@ from . import commands as _
 
 
 class MessagesBridge(Bridge):
-    module = "mautrix_line"
-    name = "mautrix-line"
-    command = "python -m mautrix-line"
+    module = "matrix_appservice_line"
+    name = "matrix-appservice-line"
+    command = "python -m matrix_appservice_line"
     description = ("A very hacky Matrix-LINE bridge based on running "
                    "LINE's Chrome extension in Puppeteer.")
-    repo_url = "git://miscworks.net/mautrix-line"
+    repo_url = "git://miscworks.net/matrix-appservice-line"
     real_user_content_key = "net.miscworks.line.puppet"
     version = version
     markdown_version = linkified_version

@@ -1,16 +1,16 @@
 {
-  "name": "mautrix-line-puppeteer",
+  "name": "matrix-appservice-line-puppeteer",
   "version": "0.1.0",
-  "description": "Puppeteer module for mautrix-line",
+  "description": "Puppeteer module for matrix-appservice-line",
   "repository": {
     "type": "git",
-    "url": "git://miscworks.net/mautrix-line.git"
+    "url": "git://miscworks.net/matrix-appservice-line.git"
   },
   "type": "module",
   "main": "src/main.js",
   "author": "Andrew Ferrazzutti <fair@miscworks.net>",
   "license": "AGPL-3.0-or-later",
-  "homepage": "https://miscworks.net/dir/mautrix-line",
+  "homepage": "https://miscworks.net/dir/matrix-appservice-line",
   "scripts": {
     "start": "node ./src/main.js"
   },

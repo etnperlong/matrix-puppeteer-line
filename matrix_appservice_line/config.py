@@ -1,4 +1,4 @@
-# mautrix-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+# matrix-appservice-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 # Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 #
 # This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@ Permissions = NamedTuple("Permissions", user=bool, admin=bool, level=str)
 class Config(BaseBridgeConfig):
     def __getitem__(self, key: str) -> Any:
         try:
-            return os.environ[f"MAUTRIX_LINE_{key.replace('.', '_').upper()}"]
+            return os.environ[f"MATRIX_APPSERVICE_LINE_{key.replace('.', '_').upper()}"]
         except KeyError:
             return super().__getitem__(key)
 

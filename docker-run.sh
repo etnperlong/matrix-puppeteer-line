@@ -2,10 +2,10 @@
 
 # Define functions.
 function fixperms {
-	chown -R $UID:$GID /data /opt/mautrix-line
+	chown -R $UID:$GID /data /opt/matrix-appservice-line
 }
 
-cd /opt/mautrix-line
+cd /opt/matrix-appservice-line
 
 if [ ! -f /data/config.yaml ]; then
 	cp example-config.yaml /data/config.yaml
@@ -18,7 +18,7 @@ if [ ! -f /data/config.yaml ]; then
 fi
 
 if [ ! -f /data/registration.yaml ]; then
-	python3 -m mautrix_line -g -c /data/config.yaml -r /data/registration.yaml
+	python3 -m matrix_appservice_line -g -c /data/config.yaml -r /data/registration.yaml
 	echo "Didn't find a registration file."
 	echo "Generated one for you."
 	echo "Copy that over to synapses app service directory."
@@ -27,4 +27,4 @@ if [ ! -f /data/registration.yaml ]; then
 fi
 
 fixperms
-exec su-exec $UID:$GID python3 -m mautrix_line -c /data/config.yaml
+exec su-exec $UID:$GID python3 -m matrix_appservice_line -c /data/config.yaml

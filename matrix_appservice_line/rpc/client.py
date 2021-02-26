@@ -1,4 +1,4 @@
-# mautrix-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+# matrix-appservice-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 # Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,6 @@ import asyncio
 
 from .rpc import RPCClient
 from .types import ChatListInfo, ChatInfo, Message, StartStatus
-from mautrix_line.rpc.types import RPCError
 
 
 class LoginCommand(TypedDict):
