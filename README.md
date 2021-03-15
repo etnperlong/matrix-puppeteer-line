@@ -1,4 +1,4 @@
-# matrix-appservice-line
+# matrix-puppeteer-line
 A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer.
 
 ## Features & roadmap
@@ -8,4 +8,4 @@ A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Pupp
 [SETUP.md](SETUP.md)
 
 ## Discussion
-Matrix room: [`#matrix-appservice-line:miscworks.net`](https://matrix.to/#/#matrix-appservice-line:miscworks.net)
+Matrix room: [`#matrix-puppeteer-line:miscworks.net`](https://matrix.to/#/#matrix-puppeteer-line:miscworks.net)

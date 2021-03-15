@@ -1,7 +1,7 @@
 {
 	"listen": {
 		"type": "unix",
-		"path": "/var/run/matrix-appservice-line/puppet.sock"
+		"path": "/var/run/matrix-puppeteer-line/puppet.sock"
 	},
 	"profile_dir": "./profiles",
 	"url": "chrome-extension://<extension-uuid>/index.html",

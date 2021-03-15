@@ -1,4 +1,4 @@
-// matrix-appservice-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
+// matrix-puppeteer-line - A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer
 // Copyright (C) 2020-2021 Tulir Asokan, Andrew Ferrazzutti
 //
 // This program is free software: you can redistribute it and/or modify

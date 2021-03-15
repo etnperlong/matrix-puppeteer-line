@@ -7,11 +7,11 @@ RUN echo $'\
 
 RUN apk add --no-cache chromium@edge
 
-WORKDIR /opt/matrix-appservice-line/puppet
-RUN chown node:node /opt/matrix-appservice-line/puppet
+WORKDIR /opt/matrix-puppeteer-line/puppet
+RUN chown node:node /opt/matrix-puppeteer-line/puppet
 USER node
 COPY package.json yarn.lock ./
 RUN yarn --production && rm -rf node_modules/puppeteer/.local-chromium
 
-COPY . /opt/matrix-appservice-line/puppet
+COPY . /opt/matrix-puppeteer-line/puppet
 CMD ["yarn", "start", "--config", "/data/config.json", "--browser", "/usr/lib/chromium/chrome", "--no-sandbox"]

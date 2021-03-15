@@ -34,5 +34,5 @@
 * Replies
 * Voice messages
 
-### Missing from matrix-appservice-line
+### Missing from matrix-puppeteer-line
 * TODO

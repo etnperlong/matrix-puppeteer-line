@@ -1,6 +1,6 @@
 import setuptools
 
-from matrix_appservice_line.get_version import git_tag, git_revision, version, linkified_version
+from matrix_puppeteer_line.get_version import git_tag, git_revision, version, linkified_version
 
 with open("requirements.txt") as reqs:
     install_requires = reqs.read().splitlines()
@@ -23,7 +23,7 @@ try:
 except IOError:
     long_desc = "Failed to read README.md"
 
-with open("matrix_appservice_line/version.py", "w") as version_file:
+with open("matrix_puppeteer_line/version.py", "w") as version_file:
     version_file.write(f"""# Generated in setup.py
 
 git_tag = {git_tag!r}
@@ -33,9 +33,9 @@ linkified_version = {linkified_version!r}
 """)
 
 setuptools.setup(
-    name="matrix-appservice-line",
+    name="matrix-puppeteer-line",
     version=version,
-    url="git://miscworks.net/matrix-appservice-line",
+    url="git://miscworks.net/matrix-puppeteer-line",
 
     author="Tulir Asokan",
     author_email="tulir@maunium.net",
@@ -60,10 +60,10 @@ setuptools.setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
     ],
-    package_data={"matrix_appservice_line": [
+    package_data={"matrix_puppeteer_line": [
         "example-config.yaml",
     ]},
     data_files=[
-        (".", ["matrix_appservice_line/example-config.yaml"]),
+        (".", ["matrix_puppeteer_line/example-config.yaml"]),
     ],
 )

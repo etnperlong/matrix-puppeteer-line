@@ -19,7 +19,7 @@ def run(cmd):
 if os.path.exists(".git") and shutil.which("git"):
     try:
         git_revision = run(["git", "rev-parse", "HEAD"]).strip().decode("ascii")
-        git_revision_url = f"git://miscworks.net/matrix-appservice-line/commit/{git_revision}"
+        git_revision_url = f"git://miscworks.net/matrix-puppeteer-line/commit/{git_revision}"
         git_revision = git_revision[:8]
     except (subprocess.SubprocessError, OSError):
         git_revision = "unknown"

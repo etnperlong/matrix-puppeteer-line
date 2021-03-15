@@ -31,19 +31,19 @@ RUN apk add --no-cache \
   chmod +x yq && mv yq /usr/bin/yq
 
 
-COPY requirements.txt /opt/matrix-appservice-line/requirements.txt
-COPY optional-requirements.txt /opt/matrix-appservice-line/optional-requirements.txt
-WORKDIR /opt/matrix-appservice-line
+COPY requirements.txt /opt/matrix-puppeteer-line/requirements.txt
+COPY optional-requirements.txt /opt/matrix-puppeteer-line/optional-requirements.txt
+WORKDIR /opt/matrix-puppeteer-line
 RUN apk add --virtual .build-deps python3-dev libffi-dev build-base \
  && pip3 install -r requirements.txt -r optional-requirements.txt \
  && apk del .build-deps
 
-COPY . /opt/matrix-appservice-line
+COPY . /opt/matrix-puppeteer-line
 RUN apk add git && pip3 install .[e2be] && apk del git \
   # This doesn't make the image smaller, but it's needed so that the `version` command works properly
-  && cp matrix_appservice_line/example-config.yaml . && rm -rf matrix_appservice_line
+  && cp matrix_puppeteer_line/example-config.yaml . && rm -rf matrix_puppeteer_line
 
 VOLUME /data
 ENV UID=1337 GID=1337
 
-CMD ["/opt/matrix-appservice-line/docker-run.sh"]
+CMD ["/opt/matrix-puppeteer-line/docker-run.sh"]
