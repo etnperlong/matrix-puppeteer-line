@@ -35,7 +35,7 @@ class MessagesBridge(Bridge):
     command = "python -m matrix_puppeteer_line"
     description = ("A very hacky Matrix-LINE bridge based on running "
                    "LINE's Chrome extension in Puppeteer.")
-    repo_url = "git://miscworks.net/matrix-puppeteer-line"
+    repo_url = "https://src.miscworks.net/fair/matrix-puppeteer-line"
     real_user_content_key = "net.miscworks.line.puppet"
     version = version
     markdown_version = linkified_version

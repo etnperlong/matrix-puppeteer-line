@@ -4,13 +4,13 @@
   "description": "Puppeteer module for matrix-puppeteer-line",
   "repository": {
     "type": "git",
-    "url": "git://miscworks.net/matrix-puppeteer-line.git"
+    "url": "git+https://src.miscworks.net/fair/matrix-puppeteer-line.git"
   },
   "type": "module",
   "main": "src/main.js",
   "author": "Andrew Ferrazzutti <fair@miscworks.net>",
   "license": "AGPL-3.0-or-later",
-  "homepage": "https://miscworks.net/dir/matrix-puppeteer-line",
+  "homepage": "https://src.miscworks.net/fair/matrix-puppeteer-line",
   "scripts": {
     "start": "node ./src/main.js"
   },

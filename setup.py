@@ -35,12 +35,12 @@ linkified_version = {linkified_version!r}
 setuptools.setup(
     name="matrix-puppeteer-line",
     version=version,
-    url="git://miscworks.net/matrix-puppeteer-line",
+    url="https://src.miscworks.net/fair/matrix-puppeteer-line",
 
-    author="Tulir Asokan",
-    author_email="tulir@maunium.net",
+    author="Andrew Ferrazzutti",
+    author_email="fair@miscworks.net",
 
-    description="A very hacky Matrix-SMS bridge based on using Android Messages for Web in Puppeteer.",
+    description="A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer.",
     long_description=long_desc,
     long_description_content_type="text/markdown",
 
