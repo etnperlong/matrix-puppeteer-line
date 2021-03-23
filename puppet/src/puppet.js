@@ -496,7 +496,7 @@ export default class MessagesPuppeteer {
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
 				id: id,
-				// TODO avatar, or leave null since this is a 1:1 chat
+				avatarURL: chatListInfo.iconURL,
 				name: chatListInfo.name,
 			}]
 		}

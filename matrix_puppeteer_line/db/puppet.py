@@ -28,20 +28,20 @@ class Puppet:
 
     mid: str
     name: Optional[str]
-    # TODO avatar: Optional[str]
+    avatar_url: Optional[str]
     is_registered: bool
 
     async def insert(self) -> None:
-        q = "INSERT INTO puppet (mid, name, is_registered) VALUES ($1, $2, $3)"
-        await self.db.execute(q, self.mid, self.name, self.is_registered)
+        q = "INSERT INTO puppet (mid, name, avatar_url, is_registered) VALUES ($1, $2, $3, $4)"
+        await self.db.execute(q, self.mid, self.name, self.avatar_url, self.is_registered)
 
     async def update(self) -> None:
-        q = "UPDATE puppet SET name=$2, is_registered=$3 WHERE mid=$1"
-        await self.db.execute(q, self.mid, self.name, self.is_registered)
+        q = "UPDATE puppet SET name=$2, avatar_url=$3, is_registered=$4 WHERE mid=$1"
+        await self.db.execute(q, self.mid, self.name, self.avatar_url, self.is_registered)
 
     @classmethod
     async def get_by_mid(cls, mid: str) -> Optional['Puppet']:
-        row = await cls.db.fetchrow("SELECT mid, name, is_registered FROM puppet WHERE mid=$1",
+        row = await cls.db.fetchrow("SELECT mid, name, avatar_url, is_registered FROM puppet WHERE mid=$1",
                                     mid)
         if not row:
             return None

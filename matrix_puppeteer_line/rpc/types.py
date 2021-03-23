@@ -28,6 +28,7 @@ class RPCError(Exception):
 class ChatListInfo(SerializableAttrs['ChatListInfo']):
     id: int
     name: str
+    iconURL: Optional[str]
     lastMsg: str
     lastMsgDate: str
 
@@ -35,7 +36,7 @@ class ChatListInfo(SerializableAttrs['ChatListInfo']):
 @dataclass
 class Participant(SerializableAttrs['Participant']):
     id: str
-    # TODO avatar: str
+    avatarURL: Optional[str]
     name: str
 
 

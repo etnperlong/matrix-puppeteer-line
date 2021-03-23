@@ -62,9 +62,9 @@ class Portal(DBPortal, BasePortal):
     _last_participant_update: Set[str]
 
     def __init__(self, chat_id: int, other_user: Optional[str] = None,
-                 mxid: Optional[RoomID] = None, name: Optional[str] = None, encrypted: bool = False
-                 ) -> None:
-        super().__init__(chat_id, other_user, mxid, name, encrypted)
+                 mxid: Optional[RoomID] = None, name: Optional[str] = None, icon_url: Optional[str] = None,
+                 encrypted: bool = False) -> None:
+        super().__init__(chat_id, other_user, mxid, name, icon_url, encrypted)
         self._create_room_lock = asyncio.Lock()
         self.log = self.log.getChild(str(chat_id))
 
@@ -240,6 +240,7 @@ class Portal(DBPortal, BasePortal):
         # TODO Consider setting no room name for non-group chats.
         #      But then the LINE bot itself may appear in the title...
         changed = await self._update_name(f"{conv.name} (LINE)")
+        changed = await self._update_icon(conv.iconURL) or changed
         if changed:
             await self.update_bridge_info()
             await self.update()
@@ -252,6 +253,15 @@ class Portal(DBPortal, BasePortal):
             self.name = name
             if self.mxid:
                 await self.main_intent.set_room_name(self.mxid, name)
+            return True
+        return False
+
+    async def _update_icon(self, icon_url: Optional[str]) -> bool:
+        if self.icon_url != icon_url:
+            self.icon_url = icon_url
+            if icon_url:
+                # TODO set icon from bytes
+                pass
             return True
         return False
 
@@ -472,6 +482,8 @@ class Portal(DBPortal, BasePortal):
         await DBMessage.delete_all(self.mxid)
         self.by_mxid.pop(self.mxid, None)
         self.mxid = None
+        self.name = None
+        self.icon_url = None
         self.encrypted = False
         await self.update()
 

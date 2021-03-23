@@ -174,9 +174,6 @@ class MautrixController {
 			// Room members are always friends (right?),
 			// so search the friend list for the sender's name
 			// and get their ID from there.
-			// TODO For rooms, allow creating Matrix puppets in case
-			//      a message is sent by someone who since left the
-			//      room and never had a puppet made for them yet.
 			sender.id = this.getUserIdFromFriendsList(sender.name)
 			// Group members aren't necessarily friends,
 			// but the participant list includes their ID.
@@ -185,7 +182,7 @@ class MautrixController {
 				const participantsList = document.querySelector(participantsListSelector)
 				sender.id = participantsList.querySelector(`img[alt='${senderName}'`).parentElement.parentElement.getAttribute("data-mid")
 			}
-			// TODO Avatar
+			sender.avatarURL = this.getParticipantListItemAvatarURL(element)
 		} else {
 			// TODO Get own ID and store it somewhere appropriate.
 			//      Unable to get own ID from a room chat...
@@ -199,7 +196,7 @@ class MautrixController {
 			await window.__mautrixShowParticipantsList()
 			const participantsList = document.querySelector(participantsListSelector)
 			sender.name = this.getParticipantListItemName(participantsList.children[0])
-			// TODO avatar
+			sender.avatarURL = this.getParticipantListItemAvatarURL(participantsList.children[0])
 			sender.id = this.ownID
 		}
 
@@ -306,12 +303,21 @@ class MautrixController {
 	 * @typedef Participant
 	 * @type object
 	 * @property {string} id - The member ID for the participant
-	 * TODO @property {string} avatar - The URL of the participant's avatar
+	 * @property {string} avatarURL - The URL of the participant's avatar
 	 * @property {string} name - The contact list name of the participant
 	 */
 
 	getParticipantListItemName(element) {
 		return element.querySelector(".mdRGT13Ttl").innerText
+	}
+
+	getParticipantListItemAvatarURL(element) {
+		const img = element.querySelector(".mdRGT13Img img[src]")
+		if (img && img.getAttribute("data-picture-path") != "" && img.src.startsWith("blob:")) {
+			return img.src
+		} else {
+			return ""
+		}
 	}
 
 	getParticipantListItemId(element) {
@@ -334,7 +340,7 @@ class MautrixController {
 			//      One idea is to add real ID as suffix if we're in a group, and
 			//      put in the puppet DB table somehow.
 			id: this.ownID,
-			// TODO avatar: child.querySelector("img").src,
+			avatarURL: this.getParticipantListItemAvatarURL(element.children[0]),
 			name: this.getParticipantListItemName(element.children[0]),
 		}
 
@@ -343,7 +349,7 @@ class MautrixController {
 			const id = this.getParticipantListItemId(child) || this.getUserIdFromFriendsList(name)
 			return {
 				id: id, // NOTE Don't want non-own user's ID to ever be null.
-				// TODO avatar: child.querySelector("img").src,
+				avatarURL: this.getParticipantListItemAvatarURL(child),
 				name: name,
 			}
 		}))
@@ -354,7 +360,7 @@ class MautrixController {
 	 * @type object
 	 * @property {number} id - The ID of the chat.
 	 * @property {string} name - The name of the chat.
-	 * TODO @property {string} icon - The icon of the chat.
+	 * @property {string} iconURL - The URL of the chat icon.
 	 * @property {string} lastMsg - The most recent message in the chat.
 	 *                              May be prefixed by sender name.
 	 * @property {string} lastMsgDate - An imprecise date for the most recent message
@@ -367,6 +373,15 @@ class MautrixController {
 
 	getChatListItemName(element) {
 		return element.querySelector(".mdCMN04Ttl").innerText
+	}
+
+	getChatListItemIconURL(element) {
+		const img = element.querySelector(".mdCMN04Img > :not(.mdCMN04ImgInner) > img[src]")
+		if (img && img.getAttribute("data-picture-path") != "" && img.src.startsWith("blob:")) {
+			return img.src
+		} else {
+			return ""
+		}
 	}
 
 	getChatListItemLastMsg(element) {
@@ -388,7 +403,7 @@ class MautrixController {
 		return !element.classList.contains("chatList") ? null : {
 			id: knownId || this.getChatListItemId(element),
 			name: this.getChatListItemName(element),
-			// TODO icon, but only for groups
+			iconURL: this.getChatListItemIconURL(element),
 			lastMsg: this.getChatListItemLastMsg(element),
 			lastMsgDate: this.getChatListItemLastMsgDate(element),
 		}

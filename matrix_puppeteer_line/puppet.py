@@ -38,8 +38,9 @@ class Puppet(DBPuppet, BasePuppet):
 
     default_mxid: UserID
 
-    def __init__(self, mid: str, name: Optional[str] = None, is_registered: bool = False) -> None:
-        super().__init__(mid=mid, name=name, is_registered=is_registered)
+    def __init__(self, mid: str, name: Optional[str] = None, avatar_url: Optional[str] = None,
+                 is_registered: bool = False) -> None:
+        super().__init__(mid=mid, name=name, avatar_url=avatar_url, is_registered=is_registered)
         self.log = self.log.getChild(mid)
 
         self.default_mxid = self.get_mxid_from_id(mid)
@@ -63,7 +64,7 @@ class Puppet(DBPuppet, BasePuppet):
     async def update_info(self, info: Participant) -> None:
         update = False
         update = await self._update_name(info.name) or update
-        # TODO Update avatar
+        update = await self._update_avatar(info.avatarURL) or update
         if update:
             await self.update()
 
@@ -72,6 +73,15 @@ class Puppet(DBPuppet, BasePuppet):
         if name != self.name:
             self.name = name
             await self.intent.set_displayname(self.name)
+            return True
+        return False
+
+    async def _update_avatar(self, avatar_url: Optional[str]) -> bool:
+        if avatar_url != self.avatar_url:
+            self.avatar_url = avatar_url
+            if avatar_url:
+                # TODO set the avatar from bytes
+                pass
             return True
         return False
 
