@@ -59,14 +59,6 @@ export default class MessagesPuppeteer {
 	}
 
 	/**
-	 * Get the inner text of an element.
-	 * To be called in browser context.
-	 */
-	_getInnerText(element) {
-		return element?.innerText
-	}
-
-	/**
 	 * Start the browser and open the messages for web page.
 	 * This must be called before doing anything else.
 	 */
@@ -213,11 +205,12 @@ export default class MessagesPuppeteer {
 					return value
 				}),
 			() => this.page.waitForSelector("#login_incorrect", {visible: true, timeout: 2000})
-				.then(value => this.page.evaluate(_getInnerText, value)),
+				.then(value => this.page.evaluate(element => element?.innerText, value)),
 			() => this._waitForLoginCancel(),
 		].map(promiseFn => cancelableResolve(promiseFn)))
 
 		this.log("Removing observers")
+		// TODO __mautrixController is undefined when cancelling, why?
 		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.id)
 		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
