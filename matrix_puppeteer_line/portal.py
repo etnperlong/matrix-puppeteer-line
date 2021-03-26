@@ -30,7 +30,7 @@ from mautrix.util.network_retry import call_with_net_retry
 
 from .db import Portal as DBPortal, Message as DBMessage
 from .config import Config
-from .rpc import ChatInfo, Participant, Message
+from .rpc import ChatInfo, Participant, Message, Client, PathImage
 from . import user as u, puppet as p, matrix as m
 
 if TYPE_CHECKING:
@@ -62,9 +62,10 @@ class Portal(DBPortal, BasePortal):
     _last_participant_update: Set[str]
 
     def __init__(self, chat_id: int, other_user: Optional[str] = None,
-                 mxid: Optional[RoomID] = None, name: Optional[str] = None, icon_url: Optional[str] = None,
+                 mxid: Optional[RoomID] = None, name: Optional[str] = None,
+                 icon_path: Optional[str] = None, icon_mxc: Optional[ContentURI] = None,
                  encrypted: bool = False) -> None:
-        super().__init__(chat_id, other_user, mxid, name, icon_url, encrypted)
+        super().__init__(chat_id, other_user, mxid, name, icon_path, icon_mxc, encrypted)
         self._create_room_lock = asyncio.Lock()
         self.log = self.log.getChild(str(chat_id))
 
@@ -229,18 +230,25 @@ class Portal(DBPortal, BasePortal):
 
         return ReuploadedMediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
 
-    async def update_info(self, conv: ChatInfo) -> None:
+    async def update_info(self, conv: ChatInfo, client: Optional[Client]) -> None:
         if self.is_direct:
             self.other_user = conv.participants[0].id
             if self._main_intent is self.az.intent:
                 self._main_intent = (await p.Puppet.get_by_mid(self.other_user)).intent
         for participant in conv.participants:
             puppet = await p.Puppet.get_by_mid(participant.id)
-            await puppet.update_info(participant)
+            await puppet.update_info(participant, client)
         # TODO Consider setting no room name for non-group chats.
         #      But then the LINE bot itself may appear in the title...
         changed = await self._update_name(f"{conv.name} (LINE)")
-        changed = await self._update_icon(conv.iconURL) or changed
+        if client:
+            if not self.is_direct:
+                changed = await self._update_icon(conv.icon, client) or changed
+            elif puppet and puppet.avatar_mxc != self.icon_mxc:
+                changed = True
+                self.icon_mxc = puppet.avatar_mxc
+                if self.mxid:
+                    await self.main_intent.set_room_avatar(self.mxid, self.icon_mxc)
         if changed:
             await self.update_bridge_info()
             await self.update()
@@ -256,12 +264,17 @@ class Portal(DBPortal, BasePortal):
             return True
         return False
 
-    async def _update_icon(self, icon_url: Optional[str]) -> bool:
-        if self.icon_url != icon_url:
-            self.icon_url = icon_url
-            if icon_url:
-                # TODO set icon from bytes
-                pass
+    async def _update_icon(self, icon: Optional[PathImage], client: Client) -> bool:
+        icon_path = icon.path if icon else None
+        if icon_path != self.icon_path:
+            self.icon_path = icon_path
+            if icon and icon.url:
+                resp = await client.read_image(icon.url)
+                self.icon_mxc = await self.main_intent.upload_media(resp.data, mime_type=resp.mime)
+            else:
+                self.icon_mxc = ContentURI("")
+            if self.mxid:
+                await self.main_intent.set_room_avatar(self.mxid, self.icon_mxc)
             return True
         return False
 
@@ -319,7 +332,7 @@ class Portal(DBPortal, BasePortal):
             for evt in messages:
                 puppet = await p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
                 if puppet and evt.sender.id not in members_known:
-                    await puppet.update_info(evt.sender)
+                    await puppet.update_info(evt.sender, source.client)
                     members_known.add(evt.sender.id)
                 await self.handle_remote_message(source, puppet, evt)
         self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
@@ -377,7 +390,7 @@ class Portal(DBPortal, BasePortal):
         if puppet:
             await puppet.az.intent.ensure_joined(self.mxid)
 
-        await self.update_info(info)
+        await self.update_info(info, source.client)
         await self.backfill(source)
         await self._update_participants(info.participants)
 
@@ -385,7 +398,7 @@ class Portal(DBPortal, BasePortal):
         if self.mxid:
             await self._update_matrix_room(source, info)
             return self.mxid
-        await self.update_info(info)
+        await self.update_info(info, source.client)
         self.log.debug("Creating Matrix room")
         name: Optional[str] = None
         initial_state = [{
@@ -483,7 +496,10 @@ class Portal(DBPortal, BasePortal):
         self.by_mxid.pop(self.mxid, None)
         self.mxid = None
         self.name = None
-        self.icon_url = None
+        self.icon_path = None
+        self.icon_mxc = None
+        self.name_set = False
+        self.icon_set = False
         self.encrypted = False
         await self.update()
 

@@ -396,6 +396,13 @@ export default class MessagesPuppeteer {
 		this.log("Updated most recent message ID map:", this.mostRecentMessages)
 	}
 
+	async readImage(imageUrl) {
+		return await this.taskQueue.push(() =>
+			this.page.evaluate(
+				url => window.__mautrixController.readImage(url),
+				imageUrl))
+	}
+
 	async startObserving() {
 		this.log("Adding chat list observer")
 		await this.page.evaluate(
@@ -496,7 +503,7 @@ export default class MessagesPuppeteer {
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
 				id: id,
-				avatarURL: chatListInfo.iconURL,
+				avatar: chatListInfo.icon,
 				name: chatListInfo.name,
 			}]
 		}

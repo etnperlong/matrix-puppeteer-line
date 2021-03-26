@@ -182,7 +182,7 @@ class MautrixController {
 				const participantsList = document.querySelector(participantsListSelector)
 				sender.id = participantsList.querySelector(`img[alt='${senderName}'`).parentElement.parentElement.getAttribute("data-mid")
 			}
-			sender.avatarURL = this.getParticipantListItemAvatarURL(element)
+			sender.avatar = this.getParticipantListItemAvatar(element)
 		} else {
 			// TODO Get own ID and store it somewhere appropriate.
 			//      Unable to get own ID from a room chat...
@@ -196,7 +196,7 @@ class MautrixController {
 			await window.__mautrixShowParticipantsList()
 			const participantsList = document.querySelector(participantsListSelector)
 			sender.name = this.getParticipantListItemName(participantsList.children[0])
-			sender.avatarURL = this.getParticipantListItemAvatarURL(participantsList.children[0])
+			sender.avatar = this.getParticipantListItemAvatar(participantsList.children[0])
 			sender.id = this.ownID
 		}
 
@@ -300,24 +300,40 @@ class MautrixController {
 	}
 
 	/**
+	 * @typedef PathImage
+	 * @type object
+	 * @property {string} path - The virtual path of the image (behaves like an ID)
+	 * @property {string} src  - The URL of the image
+	 */
+
+	_getPathImage(img) {
+		if (img && img.src.startsWith("blob:")) {
+			// NOTE Having a blob but no path means the image exists,
+			// 		but in a form that cannot be uniquely identified.
+			// 		If instead there is no blob, the image is blank.
+			return {
+				path: img.getAttribute("data-picture-path"),
+				url: img.src,
+			}
+		} else {
+			return null
+		}
+	}
+
+	/**
 	 * @typedef Participant
 	 * @type object
-	 * @property {string} id - The member ID for the participant
-	 * @property {string} avatarURL - The URL of the participant's avatar
-	 * @property {string} name - The contact list name of the participant
+	 * @property {string} id        - The member ID for the participant
+	 * @property {PathImage} avatar - The path and blob URL of the participant's avatar
+	 * @property {string} name      - The contact list name of the participant
 	 */
 
 	getParticipantListItemName(element) {
 		return element.querySelector(".mdRGT13Ttl").innerText
 	}
 
-	getParticipantListItemAvatarURL(element) {
-		const img = element.querySelector(".mdRGT13Img img[src]")
-		if (img && img.getAttribute("data-picture-path") != "" && img.src.startsWith("blob:")) {
-			return img.src
-		} else {
-			return ""
-		}
+	getParticipantListItemAvatar(element) {
+		return this._getPathImage(element.querySelector(".mdRGT13Img img[src]"))
 	}
 
 	getParticipantListItemId(element) {
@@ -340,7 +356,7 @@ class MautrixController {
 			//      One idea is to add real ID as suffix if we're in a group, and
 			//      put in the puppet DB table somehow.
 			id: this.ownID,
-			avatarURL: this.getParticipantListItemAvatarURL(element.children[0]),
+			avatar: this.getParticipantListItemAvatar(element.children[0]),
 			name: this.getParticipantListItemName(element.children[0]),
 		}
 
@@ -349,7 +365,7 @@ class MautrixController {
 			const id = this.getParticipantListItemId(child) || this.getUserIdFromFriendsList(name)
 			return {
 				id: id, // NOTE Don't want non-own user's ID to ever be null.
-				avatarURL: this.getParticipantListItemAvatarURL(child),
+				avatar: this.getParticipantListItemAvatar(child),
 				name: name,
 			}
 		}))
@@ -358,9 +374,9 @@ class MautrixController {
 	/**
 	 * @typedef ChatListInfo
 	 * @type object
-	 * @property {number} id - The ID of the chat.
-	 * @property {string} name - The name of the chat.
-	 * @property {string} iconURL - The URL of the chat icon.
+	 * @property {number} id      - The ID of the chat.
+	 * @property {string} name    - The name of the chat.
+	 * @property {PathImage} icon - The path and blob URL of the chat icon.
 	 * @property {string} lastMsg - The most recent message in the chat.
 	 *                              May be prefixed by sender name.
 	 * @property {string} lastMsgDate - An imprecise date for the most recent message
@@ -375,13 +391,8 @@ class MautrixController {
 		return element.querySelector(".mdCMN04Ttl").innerText
 	}
 
-	getChatListItemIconURL(element) {
-		const img = element.querySelector(".mdCMN04Img > :not(.mdCMN04ImgInner) > img[src]")
-		if (img && img.getAttribute("data-picture-path") != "" && img.src.startsWith("blob:")) {
-			return img.src
-		} else {
-			return ""
-		}
+	getChatListItemIcon(element) {
+		return this._getPathImage(element.querySelector(".mdCMN04Img > :not(.mdCMN04ImgInner) > img[src]"))
 	}
 
 	getChatListItemLastMsg(element) {
@@ -403,7 +414,7 @@ class MautrixController {
 		return !element.classList.contains("chatList") ? null : {
 			id: knownId || this.getChatListItemId(element),
 			name: this.getChatListItemName(element),
-			iconURL: this.getChatListItemIconURL(element),
+			icon: this.getChatListItemIcon(element),
 			lastMsg: this.getChatListItemLastMsg(element),
 			lastMsgDate: this.getChatListItemLastMsgDate(element),
 		}
@@ -434,17 +445,13 @@ class MautrixController {
 	}
 
 	/**
-	 * TODO
-	 * Download an image and return it as a data URL.
-	 * Used for downloading the blob: URLs in image messages.
+	 * Download an image at a given URL and return it as a data URL.
 	 *
-	 * @param {number} id - The ID of the message whose image to download.
+	 * @param {string} url - The URL of the image to download.
 	 * @return {Promise<string>} - The data URL (containing the mime type and base64 data)
 	 */
-	async readImage(id) {
-		const imageElement = document.querySelector(
-			`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
-		const resp = await fetch(imageElement.getAttribute("src"))
+	async readImage(url) {
+		const resp = await fetch(url)
 		const reader = new FileReader()
 		const promise = new Promise((resolve, reject) => {
 			reader.onload = () => resolve(reader.result)

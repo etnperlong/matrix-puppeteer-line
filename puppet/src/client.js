@@ -232,6 +232,7 @@ export default class Client {
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
 				get_messages: req => this.puppet.getMessages(req.chat_id),
+				read_image: req => this.puppet.readImage(req.image_url),
 				is_connected: async () => ({ is_connected: !await this.puppet.isDisconnected() }),
 			}[req.command] || this.handleUnknownCommand
 		}

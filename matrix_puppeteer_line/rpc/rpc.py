@@ -161,6 +161,6 @@ class RPCClient:
         await self._writer.drain()
         return future
 
-    async def request(self, command: str, **data: Any) -> Dict[str, Any]:
+    async def request(self, command: str, **data: Any) -> Any:
         future = await self._raw_request(command, **data)
         return await future

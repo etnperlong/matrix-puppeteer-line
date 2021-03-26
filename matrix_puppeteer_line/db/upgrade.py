@@ -50,9 +50,13 @@ async def upgrade_v1(conn: Connection) -> None:
 
 @upgrade_table.register(description="Avatars and icons")
 async def upgrade_avatars(conn: Connection) -> None:
-    for (table, column) in [('puppet', 'avatar_url'), ('portal', 'icon_url')]:
-        column_exists = await conn.fetchval(
-                 "SELECT EXISTS(SELECT FROM information_schema.columns "
-                f"WHERE table_name='{table}' AND column_name='{column}')")
-        if not column_exists:
-            await conn.execute(f'ALTER TABLE "{table}" ADD COLUMN {column} TEXT')
+    await conn.execute("""ALTER TABLE puppet
+       ADD COLUMN IF NOT EXISTS avatar_path TEXT,
+       ADD COLUMN IF NOT EXISTS avatar_mxc TEXT,
+       ADD COLUMN IF NOT EXISTS name_set BOOLEAN,
+       ADD COLUMN IF NOT EXISTS avatar_set BOOLEAN
+   """)
+    await conn.execute("""ALTER TABLE portal
+       ADD COLUMN IF NOT EXISTS icon_path TEXT,
+       ADD COLUMN IF NOT EXISTS icon_mxc TEXT
+   """)

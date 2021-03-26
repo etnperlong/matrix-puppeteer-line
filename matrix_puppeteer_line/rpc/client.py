@@ -15,10 +15,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from typing import AsyncGenerator, TypedDict, List, Tuple, Dict, Callable, Awaitable, Any
 from collections import deque
+from base64 import b64decode
 import asyncio
 
 from .rpc import RPCClient
-from .types import ChatListInfo, ChatInfo, Message, StartStatus
+from .types import ChatListInfo, ChatInfo, Message, ImageData, StartStatus
 
 
 class LoginCommand(TypedDict):
@@ -44,6 +45,25 @@ class Client(RPCClient):
     async def get_messages(self, chat_id: int) -> List[Message]:
         resp = await self.request("get_messages", chat_id=chat_id)
         return [Message.deserialize(data) for data in resp]
+
+    async def read_image(self, image_url: str) -> ImageData:
+        resp = await self.request("read_image", image_url=image_url)
+        if not resp.startswith("data:"):
+            raise TypeError("Image data is not in the form of a Data URL")
+
+        typestart = 5
+        typeend = resp.find(",", typestart)
+        data = bytes(resp[typeend+1:], "utf-8")
+
+        paramstart = resp.rfind(";", typestart, typeend)
+        if paramstart == -1:
+            mime = resp[typestart:typeend]
+        else:
+            mime = resp[typestart:paramstart]
+            if resp[paramstart+1:typeend] == "base64":
+                data = b64decode(data)
+
+        return ImageData(mime=mime, data=data)
 
     async def is_connected(self) -> bool:
         resp = await self.request("is_connected")

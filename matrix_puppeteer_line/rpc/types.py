@@ -25,10 +25,16 @@ class RPCError(Exception):
 
 
 @dataclass
+class PathImage(SerializableAttrs['PathImage']):
+    path: str
+    url: str
+
+
+@dataclass
 class ChatListInfo(SerializableAttrs['ChatListInfo']):
     id: int
     name: str
-    iconURL: Optional[str]
+    icon: Optional[PathImage]
     lastMsg: str
     lastMsgDate: str
 
@@ -36,7 +42,7 @@ class ChatListInfo(SerializableAttrs['ChatListInfo']):
 @dataclass
 class Participant(SerializableAttrs['Participant']):
     id: str
-    avatarURL: Optional[str]
+    avatar: Optional[PathImage]
     name: str
 
 
@@ -54,6 +60,12 @@ class Message(SerializableAttrs['Message']):
     timestamp: int = None
     text: Optional[str] = None
     image: Optional[str] = None
+
+
+@dataclass
+class ImageData:
+    mime: str
+    data: bytes
 
 
 @dataclass
