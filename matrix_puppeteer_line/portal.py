@@ -23,7 +23,7 @@ from mautrix.appservice import AppService, IntentAPI
 from mautrix.bridge import BasePortal, NotificationDisabler
 from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, MessageType,
                            TextMessageEventContent, MediaMessageEventContent, Membership,
-                           ContentURI, EncryptedFile)
+                           ContentURI, EncryptedFile, ImageInfo)
 from mautrix.errors import MatrixError
 from mautrix.util.simple_lock import SimpleLock
 from mautrix.util.network_retry import call_with_net_retry
@@ -194,11 +194,10 @@ class Portal(DBPortal, BasePortal):
             return
 
         event_id = None
-        if evt.image:
+        if evt.image_url:
             content = await self._handle_remote_photo(source, intent, evt)
-            if content:
-                event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
-        if evt.text and not evt.text.isspace():
+            event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
+        elif evt.text and not evt.text.isspace():
             content = TextMessageEventContent(msgtype=MessageType.TEXT, body=evt.text)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         if event_id:
@@ -209,12 +208,22 @@ class Portal(DBPortal, BasePortal):
 
     async def _handle_remote_photo(self, source: 'u.User', intent: IntentAPI, message: Message
                                    ) -> Optional[MediaMessageEventContent]:
-        # TODO
-        pass
+        resp = await source.client.read_image(message.image_url)
+        media_info = await self._reupload_remote_media(resp.data, intent, resp.mime)
+        return MediaMessageEventContent(url=media_info.mxc, file=media_info.decryption_info,
+                                        msgtype=MessageType.IMAGE, body=media_info.file_name,
+                                        info=ImageInfo(mimetype=media_info.mime_type, size=media_info.size))
 
-    async def _reupload_remote_media(self, data: bytes, intent: IntentAPI) -> ReuploadedMediaInfo:
-        upload_mime_type = mime_type = magic.from_buffer(data, mime=True)
-        upload_file_name = file_name = f"image{mimetypes.guess_extension(mime_type)}"
+    async def _reupload_remote_media(self, data: bytes, intent: IntentAPI,
+                                     mime_type: str = None, file_name: str = None
+                                     ) -> ReuploadedMediaInfo:
+        if not mime_type:
+            mime_type = magic.from_buffer(data, mime=True)
+        upload_mime_type = mime_type
+        if not file_name:
+            file_name = f"image{mimetypes.guess_extension(mime_type)}"
+        upload_file_name = file_name
+
         decryption_info = None
         if self.encrypted and encrypt_attachment:
             data, decryption_info = encrypt_attachment(data)

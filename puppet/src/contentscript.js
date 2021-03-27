@@ -211,8 +211,9 @@ class MautrixController {
 			// TODO Use "Inner" or not?
 			messageData.text = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerText
 		} else if (messageElement.classList.contains("mdRGT07Image")) {
-			// TODO Doesn't this need to be a URL?
-			messageData.image = true
+			// TODO Probably need a MutationObserver to wait for image to load.
+			// 		Should also catch "#_chat_message_image_failure"
+			messageData.image_url = messageElement.querySelector(".mdRGT07MsgImg > img")?.src
 		}
 		return messageData
 	}

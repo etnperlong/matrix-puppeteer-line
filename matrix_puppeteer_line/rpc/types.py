@@ -59,7 +59,7 @@ class Message(SerializableAttrs['Message']):
     sender: Optional[Participant]
     timestamp: int = None
     text: Optional[str] = None
-    image: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 @dataclass
