@@ -73,6 +73,10 @@ class Client(RPCClient):
         resp = await self.request("send", chat_id=chat_id, text=text)
         return resp["id"]
 
+    async def send_file(self, chat_id: int, file_path: str) -> int:
+        resp = await self.request("send_file", chat_id=chat_id, file_path=file_path)
+        return resp["id"]
+
     async def set_last_message_ids(self, msg_ids: Dict[int, int]) -> None:
         await self.request("set_last_message_ids", msg_ids=msg_ids)
 

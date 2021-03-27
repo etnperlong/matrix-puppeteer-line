@@ -396,6 +396,36 @@ export default class MessagesPuppeteer {
 				imageUrl))
 	}
 
+	async sendFile(chatID, filePath) {
+		return { id: await this.taskQueue.push(() => this._sendFileUnsafe(chatID, filePath)) }
+	}
+
+	async _sendFileUnsafe(chatID, filePath) {
+		await this._switchChat(chatID)
+		const promise = this.page.evaluate(
+			() => window.__mautrixController.promiseOwnMessage())
+
+		// TODO Exit when the attach button is unclickable,
+		// 		like in chats with a bot
+		const [fileChooser] = await Promise.all([
+			this.page.waitForFileChooser(),
+			this.page.click("#_chat_room_plus_btn")
+		])
+		await fileChooser.accept([filePath])
+
+		// TODO Commonize with text message sending
+		try {
+			this.log("Waiting for message to be sent")
+			const id = await promise
+			this.log(`Successfully sent message ${id} to ${chatID}`)
+			return id
+		} catch (e) {
+			// TODO Handle a timeout better than this
+			this.error(`Timed out waiting for message to ${chatID}`)
+			return -1
+		}
+	}
+
 	async startObserving() {
 		this.log("Adding chat list observer")
 		await this.page.evaluate(

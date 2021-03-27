@@ -18,6 +18,8 @@ import mimetypes
 import asyncio
 
 import magic
+from random import randint
+from os import remove
 
 from mautrix.appservice import AppService, IntentAPI
 from mautrix.bridge import BasePortal, NotificationDisabler
@@ -122,20 +124,25 @@ class Portal(DBPortal, BasePortal):
             return
         # TODO deduplication of outgoing messages
         text = message.body
-        media_id = None
-        if message.msgtype == MessageType.EMOTE:
-            text = f"/me {text}"
+        if message.msgtype.is_text:
+            if message.msgtype == MessageType.EMOTE:
+                text = f"/me {text}"
+            message_id = await sender.client.send(self.chat_id, text)
         elif message.msgtype.is_media:
-            # if message.file and decrypt_attachment:
-            #     data = await self.main_intent.download_media(message.file.url)
-            #     data = decrypt_attachment(data, message.file.key.key,
-            #                               message.file.hashes.get("sha256"), message.file.iv)
-            # else:
-            #     data = await self.main_intent.download_media(message.url)
-            # mime_type = message.info.mimetype or magic.from_buffer(data, mime=True)
-            # TODO media
-            return
-        message_id = await sender.client.send(self.chat_id, text)
+            if message.file and decrypt_attachment:
+                data = await self.main_intent.download_media(message.file.url)
+                data = decrypt_attachment(data, message.file.key.key,
+                                          message.file.hashes.get("sha256"), message.file.iv)
+            else:
+                data = await self.main_intent.download_media(message.url)
+            mime_type = message.info.mimetype or magic.from_buffer(data, mime=True)
+
+            # TODO Set path from config
+            file_path = f"/dev/shm/file_{randint(0,1000)}{mimetypes.guess_extension(mime_type)}"
+            temp_file = open(file_path, 'wb')
+            temp_file.write(data)
+            message_id = await sender.client.send_file(self.chat_id, file_path)
+            remove(file_path)
         # TODO Handle message-send timeouts better
         if message_id != -1:
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)

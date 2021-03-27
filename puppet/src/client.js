@@ -228,6 +228,7 @@ export default class Client {
 				login: req => this.puppet.waitForLogin(req.login_type, req.login_data),
 				cancel_login: () => this.puppet.cancelLogin(),
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
+				send_file: req => this.puppet.sendFile(req.chat_id, req.file_path),
 				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids),
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
