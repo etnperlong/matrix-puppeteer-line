@@ -225,16 +225,27 @@ class MautrixController {
 		let resolve
 		let reject
 
+		const resolveMessage = () => {
+			observer.disconnect()
+			observer = null
+			window.__mautrixReceiveMessageID(msgID)
+			resolve(msgID)
+		}
+
 		const invisibleTimeCallback = (changes) => {
 			for (const change of changes) {
 				for (const addedNode of change.addedNodes) {
 					if (addedNode.classList.contains("mdRGT07Own")) {
-						const timeElement = addedNode.querySelector("time.MdNonDisp")
+						const timeElement = addedNode.querySelector("time")
 						if (timeElement) {
 							msgID = +addedNode.getAttribute("data-local-id")
-							observer.disconnect()
-							observer = new MutationObserver(visibleTimeCallback)
-							observer.observe(timeElement, { attributes: true, attributeFilter: ["class"] })
+							if (timeElement.classList.contains(".MdNonDisp")) {
+								observer.disconnect()
+								observer = new MutationObserver(visibleTimeCallback)
+								observer.observe(timeElement, { attributes: true, attributeFilter: ["class"] })
+							} else {
+								resolveMessage()
+							}
 							return
 						}
 					}
@@ -245,9 +256,7 @@ class MautrixController {
 		const visibleTimeCallback = (changes) => {
 			for (const change of changes) {
 				if (!change.target.classList.contains("MdNonDisp")) {
-					window.__mautrixReceiveMessageID(msgID)
-					observer.disconnect()
-					resolve(msgID)
+					resolveMessage()
 					return
 				}
 			}
@@ -262,7 +271,12 @@ class MautrixController {
 			resolve = realResolve
 			reject = realReject
 			// TODO Handle a timeout better than this
-			setTimeout(() => { observer.disconnect(); reject() }, 10000)
+			setTimeout(() => {
+				if (observer) {
+					observer.disconnect()
+					reject()
+				}
+			}, 5000)
 		})
 	}
 

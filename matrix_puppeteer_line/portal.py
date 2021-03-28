@@ -25,7 +25,8 @@ from mautrix.appservice import AppService, IntentAPI
 from mautrix.bridge import BasePortal, NotificationDisabler
 from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, MessageType,
                            TextMessageEventContent, MediaMessageEventContent, Membership,
-                           ContentURI, EncryptedFile, ImageInfo)
+                           ContentURI, EncryptedFile, ImageInfo,
+                           RelatesTo, RelationType)
 from mautrix.errors import MatrixError
 from mautrix.util.simple_lock import SimpleLock
 from mautrix.util.network_retry import call_with_net_retry
@@ -150,6 +151,10 @@ class Portal(DBPortal, BasePortal):
             await self._send_delivery_receipt(event_id)
             self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
         else:
+            await self.main_intent.send_notice(
+                self.mxid,
+               "Posting this message to LINE may have failed.",
+               relates_to=RelatesTo(rel_type=RelationType.REPLY, event_id=event_id))
             self.log.warning(f"Handled Matrix message {event_id} -> {message_id}")
 
     async def handle_matrix_leave(self, user: 'u.User') -> None:
@@ -514,8 +519,6 @@ class Portal(DBPortal, BasePortal):
         self.name = None
         self.icon_path = None
         self.icon_mxc = None
-        self.name_set = False
-        self.icon_set = False
         self.encrypted = False
         await self.update()
 

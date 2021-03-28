@@ -405,13 +405,18 @@ export default class MessagesPuppeteer {
 		const promise = this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage())
 
-		// TODO Exit when the attach button is unclickable,
-		// 		like in chats with a bot
-		const [fileChooser] = await Promise.all([
-			this.page.waitForFileChooser(),
-			this.page.click("#_chat_room_plus_btn")
-		])
-		await fileChooser.accept([filePath])
+		try {
+			this.log(`About to ask for file chooser in ${chatID}`)
+			const [fileChooser] = await Promise.all([
+				this.page.waitForFileChooser(),
+				this.page.click("#_chat_room_plus_btn")
+			])
+			this.log(`About to upload ${filePath}`)
+			await fileChooser.accept([filePath])
+		} catch (e) {
+			this.log(`Failed to upload file to ${chatID}`)
+			return -1
+		}
 
 		// TODO Commonize with text message sending
 		try {
