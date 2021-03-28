@@ -211,9 +211,35 @@ class MautrixController {
 			// TODO Use "Inner" or not?
 			messageData.text = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerText
 		} else if (messageElement.classList.contains("mdRGT07Image")) {
-			// TODO Probably need a MutationObserver to wait for image to load.
-			// 		Should also catch "#_chat_message_image_failure"
-			messageData.image_url = messageElement.querySelector(".mdRGT07MsgImg > img")?.src
+			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
+			if (img) {
+				if (img.src.startsWith("blob:")) {
+					messageData.image_url = img.src
+				} else {
+					let resolve
+					// TODO Should reject on "#_chat_message_image_failure"
+					let observer = new MutationObserver((changes) => {
+						for (const change of changes) {
+							if (change.target.src.startsWith("blob:")) {
+								observer.disconnect()
+								observer = null
+								resolve(change.target.src)
+								return
+							}
+						}
+					})
+					observer.observe(img, { attributes: true, attributeFilter: ["src"] })
+					messageData.image_url = await new Promise((realResolve, reject) => {
+						resolve = realResolve
+						setTimeout(() => {
+							if (observer) {
+								observer.disconnect()
+								resolve(img.src)
+							}
+						}, 5000)
+					})
+				}
+			}
 		}
 		return messageData
 	}
@@ -223,7 +249,6 @@ class MautrixController {
 		let observer
 		let msgID = -1
 		let resolve
-		let reject
 
 		const resolveMessage = () => {
 			observer.disconnect()
@@ -267,9 +292,8 @@ class MautrixController {
 			document.querySelector("#_chat_room_msg_list"),
 			{ childList: true })
 
-		return new Promise((realResolve, realReject) => {
+		return new Promise((realResolve, reject) => {
 			resolve = realResolve
-			reject = realReject
 			// TODO Handle a timeout better than this
 			setTimeout(() => {
 				if (observer) {
