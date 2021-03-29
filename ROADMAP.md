@@ -3,16 +3,38 @@
 * Matrix → LINE
   * [ ] Message content
     * [x] Text
-    * [ ] Media
+    * [x] Images
+    * [ ] Files
     * [ ] Stickers
-    * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
+  * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
+  * [ ] Room metadata changes
+    * [ ] Name
+    * [ ] Avatar
 * LINE → Matrix
   * [ ] Message content
     * [x] Text
-    * [ ] Media
+    * [x] Images
+    * [ ] Files
+    * [ ] Audio
+    * [ ] Location
+    * [ ] Videos
     * [ ] Stickers & special emoji
-    * [ ] Read receipts
-  * [ ] Notification for message send failure
+  * [x] Notification for message send failure
+  * [ ] Read receipts
+  * [x] User metadata
+    * [ ] Name
+      * [x] On initial sync
+      * [ ] On change
+    * [ ] Avatar
+      * [x] On initial sync
+      * [ ] On change
+  * [ ] Chat metadata
+    * [ ] Name
+      * [x] On initial sync
+      * [ ] On change
+    * [ ] Icon
+      * [x] On initial sync
+      * [ ] On change
   * [x] Message history
     * [x] When creating portal
     * [x] Missed messages
@@ -21,6 +43,10 @@
     * [x] Direct chats
     * [x] Groups (named chats)
     * [x] Rooms (unnamed chats / "multi-user direct chats")
+  * [ ] Membership actions
+    * [x] Add member
+    * [x] Remove member
+    * [ ] Block
 * Misc
   * [x] Automatic portal creation
     * [x] At startup
@@ -38,11 +64,13 @@
 * Typing notifications
 * Message edits
 * Formatted messages
+* Presence
 
-### Missing from LINE on Chrome:
+### Missing from LINE on Chrome
 * Message redaction (delete/unsend)
 * Replies
-* Voice messages
+* Audio message sending
+* Location sending
 * Voice/video calls
 * Unlimited message history
 
