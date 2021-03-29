@@ -5,7 +5,7 @@
     * [x] Text
     * [x] Images
     * [ ] Files
-    * [ ] Stickers
+    * [x] Stickers
   * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
   * [ ] Room metadata changes
     * [ ] Name
