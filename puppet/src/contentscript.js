@@ -150,6 +150,10 @@ class MautrixController {
 	 * @property {string}  [image]     - The URL to the image in the message.
 	 */
 
+	_isLoadedImageURL(src) {
+		return src?.startsWith("blob:")
+	}
+
 	/**
 	 * Parse a message element (mws-message-wrapper)
 	 *
@@ -213,22 +217,27 @@ class MautrixController {
 		} else if (messageElement.classList.contains("mdRGT07Image")) {
 			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
 			if (img) {
-				if (img.src.startsWith("blob:")) {
-					messageData.image_url = img.src
-				} else {
-					let resolve
-					// TODO Should reject on "#_chat_message_image_failure"
-					let observer = new MutationObserver((changes) => {
-						for (const change of changes) {
-							if (change.target.src.startsWith("blob:")) {
-								observer.disconnect()
-								observer = null
-								resolve(change.target.src)
-								return
-							}
+				let resolve
+				// TODO Should reject on "#_chat_message_image_failure"
+				let observer = new MutationObserver((changes) => {
+					for (const change of changes) {
+						if (this._isLoadedImageURL(change.target.src) && observer) {
+							observer.disconnect()
+							observer = null
+							resolve(change.target.src)
+							return
 						}
-					})
-					observer.observe(img, { attributes: true, attributeFilter: ["src"] })
+					}
+				})
+				observer.observe(img, { attributes: true, attributeFilter: ["src"] })
+
+				if (this._isLoadedImageURL(img.src)) {
+					// Check for this AFTER attaching the observer, in case
+					// the image loaded after the img element was found but
+					// before the observer was attached.
+					messageData.image_url = img.src
+					observer.disconnect()
+				} else {
 					messageData.image_url = await new Promise((realResolve, reject) => {
 						resolve = realResolve
 						setTimeout(() => {
@@ -236,7 +245,7 @@ class MautrixController {
 								observer.disconnect()
 								resolve(img.src)
 							}
-						}, 5000)
+						}, 10000) // Longer timeout for image downloads
 					})
 				}
 			}
@@ -245,10 +254,11 @@ class MautrixController {
 	}
 
 
-	promiseOwnMessage() {
+	promiseOwnMessage(timeoutLimitMillis, successSelector, failureSelector=null) {
 		let observer
 		let msgID = -1
 		let resolve
+		let reject
 
 		const resolveMessage = () => {
 			observer.disconnect()
@@ -257,50 +267,81 @@ class MautrixController {
 			resolve(msgID)
 		}
 
-		const invisibleTimeCallback = (changes) => {
+		const rejectMessage = failureElement => {
+			observer.disconnect()
+			observer = null
+			reject(failureElement)
+		}
+
+		const changeCallback = (changes) => {
 			for (const change of changes) {
 				for (const addedNode of change.addedNodes) {
 					if (addedNode.classList.contains("mdRGT07Own")) {
-						const timeElement = addedNode.querySelector("time")
-						if (timeElement) {
+						const successElement = addedNode.querySelector(successSelector)
+						if (successElement) {
+							console.log("Found success element")
+							console.log(successElement)
 							msgID = +addedNode.getAttribute("data-local-id")
-							if (timeElement.classList.contains(".MdNonDisp")) {
+							if (successElement.classList.contains("MdNonDisp")) {
+								console.log("Invisible success, wait")
 								observer.disconnect()
-								observer = new MutationObserver(visibleTimeCallback)
-								observer.observe(timeElement, { attributes: true, attributeFilter: ["class"] })
+								observer = new MutationObserver(getVisibleCallback(true))
+								observer.observe(successElement, { attributes: true, attributeFilter: ["class"] })
 							} else {
+								console.log("Already visible success")
 								resolveMessage()
 							}
 							return
+						} else if (failureSelector) {
+							const failureElement = addedNode.querySelector(failureSelector)
+							if (failureElement) {
+								console.log("Found failure element")
+								console.log(failureElement)
+								if (failureElement.classList.contains("MdNonDisp")) {
+									console.log("Invisible failure, wait")
+									observer.disconnect()
+									observer = new MutationObserver(getVisibleCallback(false))
+									observer.observe(successElement, { attributes: true, attributeFilter: ["class"] })
+								} else {
+									console.log("Already visible failure")
+									rejectMessage(failureElement)
+								}
+								return
+							}
 						}
 					}
 				}
 			}
 		}
 
-		const visibleTimeCallback = (changes) => {
-			for (const change of changes) {
-				if (!change.target.classList.contains("MdNonDisp")) {
-					resolveMessage()
-					return
+		const getVisibleCallback = isSuccess => {
+			return changes => {
+				for (const change of changes) {
+					if (!change.target.classList.contains("MdNonDisp")) {
+						console.log(`Waited for visible ${isSuccess ? "success" : "failure"}`)
+						console.log(change.target)
+						isSuccess ? resolveMessage() : rejectMessage(change.target)
+						return
+					}
 				}
 			}
 		}
 
-		observer = new MutationObserver(invisibleTimeCallback)
+		observer = new MutationObserver(changeCallback)
 		observer.observe(
 			document.querySelector("#_chat_room_msg_list"),
 			{ childList: true })
 
-		return new Promise((realResolve, reject) => {
+		return new Promise((realResolve, realReject) => {
 			resolve = realResolve
-			// TODO Handle a timeout better than this
+			reject = realReject
 			setTimeout(() => {
 				if (observer) {
+					console.log("Timeout!")
 					observer.disconnect()
 					reject()
 				}
-			}, 5000)
+			}, timeoutLimitMillis)
 		})
 	}
 

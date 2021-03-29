@@ -403,7 +403,10 @@ export default class MessagesPuppeteer {
 	async _sendFileUnsafe(chatID, filePath) {
 		await this._switchChat(chatID)
 		const promise = this.page.evaluate(
-			() => window.__mautrixController.promiseOwnMessage())
+			() => window.__mautrixController.promiseOwnMessage(
+				10000, // Use longer timeout for file uploads
+				"#_chat_message_success_menu",
+				"#_chat_message_fail_menu"))
 
 		try {
 			this.log(`About to ask for file chooser in ${chatID}`)
@@ -420,13 +423,14 @@ export default class MessagesPuppeteer {
 
 		// TODO Commonize with text message sending
 		try {
-			this.log("Waiting for message to be sent")
+			this.log("Waiting for file to be sent")
 			const id = await promise
-			this.log(`Successfully sent message ${id} to ${chatID}`)
+			this.log(`Successfully sent file in message ${id} to ${chatID}`)
 			return id
 		} catch (e) {
-			// TODO Handle a timeout better than this
-			this.error(`Timed out waiting for message to ${chatID}`)
+			this.error(`Error sending file to ${chatID}`)
+			// TODO Figure out why e is undefined...
+			//this.error(e)
 			return -1
 		}
 	}
@@ -551,7 +555,7 @@ export default class MessagesPuppeteer {
 	async _sendMessageUnsafe(chatID, text) {
 		await this._switchChat(chatID)
 		const promise = this.page.evaluate(
-			() => window.__mautrixController.promiseOwnMessage())
+			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
 
 		const input = await this.page.$("#_chat_room_input")
 		await input.click()
@@ -564,8 +568,8 @@ export default class MessagesPuppeteer {
 			this.log(`Successfully sent message ${id} to ${chatID}`)
 			return id
 		} catch (e) {
-			// TODO Handle a timeout better than this
-			this.error(`Timed out waiting for message to ${chatID}`)
+			// TODO Catch if something other than a timeout
+			this.error(`Timed out sending message to ${chatID}`)
 			return -1
 		}
 	}
