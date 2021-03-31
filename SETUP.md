@@ -1,5 +1,5 @@
 # Setup
-1. Download the .crx file of the [LINE Chrome extension](https://chrome.google.com/webstore/detail/line/ophjlpahpchlmihnnnihgmmeilfjmjjc) (version 2.4.1), and extract it to `puppet/extension_files`
+1. Download the .crx file of the [LINE Chrome extension](https://chrome.google.com/webstore/detail/line/ophjlpahpchlmihnnnihgmmeilfjmjjc) (version 2.4.3), and extract it to `puppet/extension_files`
 2. `cd` to the `puppet` directory and run `yarn --production`
 3. Run `node prep_helper.js` to open the version of Chrome downloaded by Puppeteer, and click on the LINE icon next to the URL bar
 4. Once the LINE popup appears, press F12 to show DevTools, which will reveal the LINE extension's UUID

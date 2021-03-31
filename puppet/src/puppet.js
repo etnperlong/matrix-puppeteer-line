@@ -165,7 +165,6 @@ export default class MessagesPuppeteer {
 
 			break
 		}
-		// TODO Phone number login
 		default:
 			this._sendLoginFailure(`Invalid login type: ${login_type}`)
 			return
