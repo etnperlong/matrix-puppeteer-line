@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from typing import Dict, Optional, List, Set, Any, AsyncGenerator, NamedTuple, TYPE_CHECKING, cast
+from asyncpg.exceptions import UniqueViolationError
 import mimetypes
 import asyncio
 
@@ -144,13 +145,16 @@ class Portal(DBPortal, BasePortal):
             temp_file.write(data)
             message_id = await sender.client.send_file(self.chat_id, file_path)
             remove(file_path)
-        # TODO Handle message-send timeouts better
+        msg = None
         if message_id != -1:
-            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
-            await msg.insert()
-            await self._send_delivery_receipt(event_id)
-            self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
-        else:
+            try:
+                msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
+                await msg.insert()
+                await self._send_delivery_receipt(event_id)
+                self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
+            except UniqueViolationError as e:
+                self.log.warning(f"Failed to handle Matrix message {event_id} -> {message_id}: {e}")
+        if not msg:
             await self.main_intent.send_notice(
                 self.mxid,
                "Posting this message to LINE may have failed.",
