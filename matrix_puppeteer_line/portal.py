@@ -454,20 +454,22 @@ class Portal(DBPortal, BasePortal):
                 "type": "m.room.related_groups",
                 "content": {"groups": [self.config["appservice.community_id"]]},
             })
-        #initial_state.append({
-        #    "type": str(EventType.ROOM_POWER_LEVELS),
-        #    "content": {
-        #        "users": {
-        #            self.az.bot_mxid: 100,
-        #            self.main_intent.mxid: 100,
-        #        },
-        #        "events": {},
-        #        "events_default": 100,
-        #        "state_default": 50,
-        #        "invite": 50,
-        #        "redact": 0
-        #    }
-        #})
+        initial_state.append({
+            "type": str(EventType.ROOM_POWER_LEVELS),
+            "content": {
+                "users": {
+                    self.az.bot_mxid: 100,
+                    self.main_intent.mxid: 100,
+                }
+            }
+        })
+        if self.icon_mxc:
+            initial_state.append({
+                "type": str(EventType.ROOM_AVATAR),
+                "content": {
+                    "url": self.icon_mxc
+                }
+            })
 
         # We lock backfill lock here so any messages that come between the room being created
         # and the initial backfill finishing wouldn't be bridged before the backfill messages.
