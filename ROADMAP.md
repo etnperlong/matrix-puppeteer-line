@@ -18,7 +18,11 @@
     * [ ] Audio
     * [ ] Location
     * [ ] Videos
-    * [ ] Stickers & special emoji
+    * [x] Stickers
+    * [ ] Sticons
+        * [x] Single
+        * [ ] Multiple or mixed with text
+    * [ ] EmojiOne
   * [x] Notification for message send failure
   * [ ] Read receipts
   * [x] User metadata

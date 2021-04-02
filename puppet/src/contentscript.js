@@ -212,9 +212,14 @@ class MautrixController {
 		}
 		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
 		if (messageElement.classList.contains("mdRGT07Text")) {
-			// TODO Use "Inner" or not?
+			// TODO Use alt text of emojione imgs
 			messageData.text = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerText
-		} else if (messageElement.classList.contains("mdRGT07Image")) {
+			// TODO HTML format for emojione imgs & sticons.
+			//      Consider using a custom sticker pack (MSC1951)
+		} else if (
+					messageElement.classList.contains("mdRGT07Image") ||
+					messageElement.classList.contains("mdRGT07Sticker")
+		) {
 			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
 			if (img) {
 				let resolve
