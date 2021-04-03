@@ -212,10 +212,27 @@ class MautrixController {
 		}
 		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
 		if (messageElement.classList.contains("mdRGT07Text")) {
-			// TODO Use alt text of emojione imgs
-			messageData.text = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerText
-			// TODO HTML format for emojione imgs & sticons.
-			//      Consider using a custom sticker pack (MSC1951)
+			const msgTextInner = messageElement.querySelector(".mdRGT07MsgTextInner")
+			if (msgTextInner) {
+				const imgs = msgTextInner.querySelectorAll("img")
+				if (imgs.length == 0) {
+					messageData.text = msgTextInner.innerText
+				} else {
+					// TODO Consider using a custom sticker pack (MSC1951)
+					//messageData.image_urls = Array.from(imgs).map(img => img.src)
+					//messageData.html = msgTextInner.innerHTML
+
+					let msgTextInnerCopy = msgTextInner.cloneNode(true)
+					// TODO Consider skipping img.CMSticon elements,
+					//      whose alt-text is ugly
+					// TODO Confirm that img is the only possible kind
+					//      of child element for a text message
+					for (let child of Array.from(msgTextInnerCopy.children)) {
+						child.replaceWith(child.getAttribute("alt"))
+					}
+					messageData.text = msgTextInnerCopy.innerText
+				}
+			}
 		} else if (
 					messageElement.classList.contains("mdRGT07Image") ||
 					messageElement.classList.contains("mdRGT07Sticker")

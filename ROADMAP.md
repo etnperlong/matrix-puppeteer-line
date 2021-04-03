@@ -22,7 +22,7 @@
     * [ ] Sticons
         * [x] Single
         * [ ] Multiple or mixed with text
-    * [ ] EmojiOne
+    * [x] EmojiOne
   * [x] Notification for message send failure
   * [ ] Read receipts
   * [x] User metadata
