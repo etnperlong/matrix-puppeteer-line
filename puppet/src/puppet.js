@@ -585,7 +585,7 @@ export default class MessagesPuppeteer {
 		const messages = await this.page.evaluate(
 			id => window.__mautrixController.parseMessageList(id), id)
 		return messages.
-			filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id).
+			filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id)).
 			sort((a,b) => a.id - b.id) // TODO Confirm whether this sort is really needed
 	}
 
