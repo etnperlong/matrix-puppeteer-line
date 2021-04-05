@@ -58,7 +58,7 @@ class Message(SerializableAttrs['Message']):
     is_outgoing: bool
     sender: Optional[Participant]
     timestamp: int = None
-    text: Optional[str] = None
+    html: Optional[str] = None
     image_url: Optional[str] = None
 
 

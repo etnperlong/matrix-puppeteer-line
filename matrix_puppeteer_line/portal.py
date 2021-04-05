@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from typing import Dict, Optional, List, Set, Any, AsyncGenerator, NamedTuple, TYPE_CHECKING, cast
 from asyncpg.exceptions import UniqueViolationError
+from html.parser import HTMLParser
 import mimetypes
 import asyncio
 
@@ -25,7 +26,7 @@ from os import remove
 from mautrix.appservice import AppService, IntentAPI
 from mautrix.bridge import BasePortal, NotificationDisabler
 from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, MessageType,
-                           TextMessageEventContent, MediaMessageEventContent, Membership,
+                           TextMessageEventContent, MediaMessageEventContent, Membership, Format,
                            ContentURI, EncryptedFile, ImageInfo,
                            RelatesTo, RelationType)
 from mautrix.errors import MatrixError
@@ -213,8 +214,56 @@ class Portal(DBPortal, BasePortal):
         if evt.image_url:
             content = await self._handle_remote_photo(source, intent, evt)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
-        elif evt.text and not evt.text.isspace():
-            content = TextMessageEventContent(msgtype=MessageType.TEXT, body=evt.text)
+        elif evt.html and not evt.html.isspace():
+            chunks = []
+
+            def handle_data(data):
+                nonlocal chunks
+                chunks.append({"type": "data", "data": data})
+
+            def handle_starttag(tag, attrs):
+                if tag == "img":
+                    obj = {"type": tag}
+                    for attr in attrs:
+                        obj[attr[0]] = attr[1]
+                    nonlocal chunks
+                    chunks.append(obj)
+
+            parser = HTMLParser()
+            parser.handle_data = handle_data
+            parser.handle_starttag = handle_starttag
+            parser.feed(evt.html)
+
+            msg_text = ""
+            msg_html = None
+
+            for chunk in chunks:
+                ctype = chunk["type"]
+                if ctype == "data":
+                    msg_text += chunk["data"]
+                    if msg_html:
+                        msg_html += chunk["data"]
+                elif ctype == "img":
+                    if not msg_html:
+                        msg_html = msg_text
+
+                    cclass = chunk["class"]
+                    if cclass == "emojione":
+                        alt = chunk["alt"]
+                    else:
+                        alt = f':{"?" if "alt" not in chunk else "".join(filter(lambda char: char.isprintable(), chunk["alt"]))}:'
+
+                    msg_text += alt
+                    # TODO Make a standalone function for this, and cache mxc in DB
+                    #      ID is some combination of data-stickon-pkg-cd, data-stickon-stk-cd, src
+                    resp = await source.client.read_image(chunk["src"])
+                    media_info = await self._reupload_remote_media(resp.data, intent, resp.mime)
+                    msg_html += f'<img data-mx-emoticon src="{media_info.mxc}" alt="{alt}" title="{alt}" height="32">'
+
+            content = TextMessageEventContent(
+                msgtype=MessageType.TEXT,
+                format=Format.HTML if msg_html else None,
+                body=msg_text, formatted_body=msg_html)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         if event_id:
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)

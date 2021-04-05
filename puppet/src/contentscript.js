@@ -145,13 +145,13 @@ class MautrixController {
 	 * @property {number}  id          - The ID of the message. Seems to be sequential.
 	 * @property {number}  timestamp   - The unix timestamp of the message. Not very accurate.
 	 * @property {boolean} is_outgoing - Whether or not this user sent the message.
-	 * @property {null|Participant} sender - Full data of the participant who sent the message, if needed and available.
-	 * @property {string}  [text]      - The text in the message.
-	 * @property {string}  [image]     - The URL to the image in the message.
+	 * @property {?Participant} sender - Full data of the participant who sent the message, if needed and available.
+	 * @property {?string} html        - The HTML format of the message, if necessary.
+	 * @property {?string} image_url   - The URL to the image in the message, if it's an image-only message.
 	 */
 
 	_isLoadedImageURL(src) {
-		return src?.startsWith("blob:")
+		return src && (src.startsWith("blob:") || src.startsWith("res/"))
 	}
 
 	/**
@@ -212,30 +212,10 @@ class MautrixController {
 		}
 		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
 		if (messageElement.classList.contains("mdRGT07Text")) {
-			const msgTextInner = messageElement.querySelector(".mdRGT07MsgTextInner")
-			if (msgTextInner) {
-				const imgs = msgTextInner.querySelectorAll("img")
-				if (imgs.length == 0) {
-					messageData.text = msgTextInner.innerText
-				} else {
-					// TODO Consider using a custom sticker pack (MSC1951)
-					//messageData.image_urls = Array.from(imgs).map(img => img.src)
-					//messageData.html = msgTextInner.innerHTML
-
-					let msgTextInnerCopy = msgTextInner.cloneNode(true)
-					// TODO Consider skipping img.CMSticon elements,
-					//      whose alt-text is ugly
-					// TODO Confirm that img is the only possible kind
-					//      of child element for a text message
-					for (let child of Array.from(msgTextInnerCopy.children)) {
-						child.replaceWith(child.getAttribute("alt"))
-					}
-					messageData.text = msgTextInnerCopy.innerText
-				}
-			}
+			messageData.html = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerHTML
 		} else if (
-					messageElement.classList.contains("mdRGT07Image") ||
-					messageElement.classList.contains("mdRGT07Sticker")
+			messageElement.classList.contains("mdRGT07Image") ||
+			messageElement.classList.contains("mdRGT07Sticker")
 		) {
 			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
 			if (img) {

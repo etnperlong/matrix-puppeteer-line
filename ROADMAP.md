@@ -19,9 +19,9 @@
     * [ ] Location
     * [ ] Videos
     * [x] Stickers
-    * [ ] Sticons
+    * [x] Sticons
         * [x] Single
-        * [ ] Multiple or mixed with text
+        * [x] Multiple or mixed with text
     * [x] EmojiOne
   * [x] Notification for message send failure
   * [ ] Read receipts
