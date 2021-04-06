@@ -584,9 +584,7 @@ export default class MessagesPuppeteer {
 		this.log("Waiting for messages to load")
 		const messages = await this.page.evaluate(
 			id => window.__mautrixController.parseMessageList(id), id)
-		return messages.
-			filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id)).
-			sort((a,b) => a.id - b.id) // TODO Confirm whether this sort is really needed
+		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
 	}
 
 	async _processChatListChangeUnsafe(id) {
