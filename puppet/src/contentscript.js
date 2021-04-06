@@ -99,7 +99,7 @@ class MautrixController {
 	 * @param {string} text - The string to parse
 	 * @param {Date} [ref] - Reference date to parse relative times
 	 * @param {{[forwardDate]: boolean}} [option] - Extra options for parser
-	 * @return {Promise<null|Date>} - The date, or null if parsing failed.
+	 * @return {Promise<?Date>} - The date, or null if parsing failed.
 	 * @private
 	 */
 	async _tryParseDate(text, ref, option) {
@@ -133,7 +133,7 @@ class MautrixController {
 	 * Try to match a user against an entry in the friends list to get their ID.
 	 *
 	 * @param {Element} element - The display name of the user to find the ID for.
-	 * @return {null|str}       - The user's ID if found.
+	 * @return {?str}           - The user's ID if found.
 	 */
 	getUserIdFromFriendsList(senderName) {
 		return document.querySelector(`#contact_wrap_friends > ul > li[title='${senderName}']`)?.getAttribute("data-mid")
@@ -350,7 +350,7 @@ class MautrixController {
 	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
-	 * @param {null|string} chatId - The ID of the currently-viewed chat, if known.
+	 * @param {?string} chatId - The ID of the currently-viewed chat, if known.
 	 * @return {[MessageData]} - A list of messages.
 	 */
 	async parseMessageList(chatId) {
@@ -489,8 +489,8 @@ class MautrixController {
 	 * Parse a conversation list item element.
 	 *
 	 * @param {Element} element - The element to parse.
-	 * @param {null|string} knownId - The ID of this element, if it is known.
-	 * @return {ChatListInfo} - The info in the element.
+	 * @param {?string} knownId - The ID of this element, if it is known.
+	 * @return {ChatListInfo}   - The info in the element.
 	 */
 	parseChatListItem(element, knownId) {
 		return !element.classList.contains("chatList") ? null : {
