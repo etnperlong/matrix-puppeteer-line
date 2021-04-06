@@ -60,3 +60,11 @@ async def upgrade_avatars(conn: Connection) -> None:
        ADD COLUMN IF NOT EXISTS icon_path TEXT,
        ADD COLUMN IF NOT EXISTS icon_mxc TEXT
    """)
+
+
+@upgrade_table.register(description="Deduplicated media")
+async def upgrade_media(conn: Connection) -> None:
+    await conn.execute("""CREATE TABLE IF NOT EXISTS media (
+        media_id   TEXT PRIMARY KEY,
+        mxc        TEXT NOT NULL
+    )""")

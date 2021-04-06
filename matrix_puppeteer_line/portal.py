@@ -33,7 +33,7 @@ from mautrix.errors import MatrixError
 from mautrix.util.simple_lock import SimpleLock
 from mautrix.util.network_retry import call_with_net_retry
 
-from .db import Portal as DBPortal, Message as DBMessage
+from .db import Portal as DBPortal, Message as DBMessage, Media as DBMedia
 from .config import Config
 from .rpc import ChatInfo, Participant, Message, Client, PathImage
 from . import user as u, puppet as p, matrix as m
@@ -212,6 +212,7 @@ class Portal(DBPortal, BasePortal):
 
         event_id = None
         if evt.image_url:
+            # TODO Deduplicate stickers, but only if encryption is disabled
             content = await self._handle_remote_photo(source, intent, evt)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         elif evt.html and not evt.html.isspace():
@@ -244,21 +245,22 @@ class Portal(DBPortal, BasePortal):
                     if msg_html:
                         msg_html += chunk["data"]
                 elif ctype == "img":
-                    if not msg_html:
-                        msg_html = msg_text
-
                     cclass = chunk["class"]
                     if cclass == "emojione":
                         alt = chunk["alt"]
+                        media_id = None
                     else:
-                        alt = f':{"?" if "alt" not in chunk else "".join(filter(lambda char: char.isprintable(), chunk["alt"]))}:'
+                        alt = "".join(filter(lambda char: char.isprintable(), chunk["alt"])).strip()
+                        alt = f':{alt if alt else "n/a"}:'
+                        media_id = f'{chunk.get("data-stickon-pkg-cd", 0)}/{chunk.get("data-stickon-stk-cd", 0)}'
 
+                    # NOTE Not encrypting content linked to by HTML tags
+                    if not self.encrypted:
+                        media_mxc = await self._get_mxc_for_remote_media(source, intent, chunk["src"], media_id)
+                        if not msg_html:
+                            msg_html = msg_text
+                        msg_html += f'<img data-mx-emoticon src="{media_mxc}" alt="{alt}" title="{alt}" height="32">'
                     msg_text += alt
-                    # TODO Make a standalone function for this, and cache mxc in DB
-                    #      ID is some combination of data-stickon-pkg-cd, data-stickon-stk-cd, src
-                    resp = await source.client.read_image(chunk["src"])
-                    media_info = await self._reupload_remote_media(resp.data, intent, resp.mime)
-                    msg_html += f'<img data-mx-emoticon src="{media_info.mxc}" alt="{alt}" title="{alt}" height="32">'
 
             content = TextMessageEventContent(
                 msgtype=MessageType.TEXT,
@@ -279,9 +281,25 @@ class Portal(DBPortal, BasePortal):
                                         msgtype=MessageType.IMAGE, body=media_info.file_name,
                                         info=ImageInfo(mimetype=media_info.mime_type, size=media_info.size))
 
+    async def _get_mxc_for_remote_media(self, source: 'u.User', intent: IntentAPI,
+                                        media_url: str, media_id: Optional[str] = None
+                                        ) -> ContentURI:
+        if not media_id:
+            media_id = media_url
+        media_info = await DBMedia.get_by_id(media_id)
+        if not media_info:
+            self.log.debug(f"Did not find existing mxc URL for {media_id}, uploading media now")
+            resp = await source.client.read_image(media_url)
+            media_info = await self._reupload_remote_media(resp.data, intent, resp.mime, disable_encryption=True)
+            await DBMedia(media_id=media_id, mxc=media_info.mxc).insert()
+            self.log.debug(f"Uploaded media as {media_info.mxc}")
+        else:
+            self.log.debug(f"Found existing mxc URL for {media_id}: {media_info.mxc}")
+        return media_info.mxc
+
     async def _reupload_remote_media(self, data: bytes, intent: IntentAPI,
-                                     mime_type: str = None, file_name: str = None
-                                     ) -> ReuploadedMediaInfo:
+                                     mime_type: str = None, file_name: str = None,
+                                     disable_encryption: bool = True) -> ReuploadedMediaInfo:
         if not mime_type:
             mime_type = magic.from_buffer(data, mime=True)
         upload_mime_type = mime_type
@@ -290,7 +308,7 @@ class Portal(DBPortal, BasePortal):
         upload_file_name = file_name
 
         decryption_info = None
-        if self.encrypted and encrypt_attachment:
+        if self.encrypted and encrypt_attachment and not disable_encryption:
             data, decryption_info = encrypt_attachment(data)
             upload_mime_type = "application/octet-stream"
             upload_file_name = None

@@ -5,11 +5,12 @@ from .user import User
 from .puppet import Puppet
 from .portal import Portal
 from .message import Message
+from .media import Media
 
 
 def init(db: Database) -> None:
-    for table in (User, Puppet, Portal, Message):
+    for table in (User, Puppet, Portal, Message, Media):
         table.db = db
 
 
-__all__ = ["upgrade_table", "User", "Puppet", "Portal", "Message"]
+__all__ = ["upgrade_table", "User", "Puppet", "Portal", "Message", "Media"]
