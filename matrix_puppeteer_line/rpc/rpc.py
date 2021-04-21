@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Dict, Any, Callable, Awaitable, List, Optional
+from typing import Dict, Any, Callable, Awaitable, List, Optional, Tuple
 import logging
 import asyncio
 import json
@@ -50,6 +50,8 @@ class RPCClient:
         self._response_waiters = {}
         self._writer = None
         self._reader = None
+        self._command_queue: List[Tuple[int, str, Dict[str, Any]]] = []
+        self._command_sem = asyncio.Semaphore(0)
 
     async def connect(self) -> None:
         if self._writer is not None:
@@ -65,6 +67,7 @@ class RPCClient:
         self._reader = r
         self._writer = w
         self.loop.create_task(self._try_read_loop())
+        self.loop.create_task(self._command_loop())
         await self.request("register", user_id=self.user_id)
 
     async def disconnect(self) -> None:
@@ -109,11 +112,16 @@ class RPCClient:
         try:
             req_id = req.pop("id")
             command = req.pop("command")
+            is_sequential = req.pop("is_sequential", False)
         except KeyError:
             self.log.debug(f"Got invalid request from server: {line}")
             return
         if req_id < 0:
-            self.loop.create_task(self._run_event_handler(req_id, command, req))
+            if not is_sequential:
+                self.loop.create_task(self._run_event_handler(req_id, command, req))
+            else:
+                self._command_queue.append((req_id, command, req))
+                self._command_sem.release()
             return
         try:
             waiter = self._response_waiters[req_id]
@@ -126,6 +134,12 @@ class RPCClient:
             waiter.set_exception(RPCError(req.get("error", line)))
         else:
             self.log.warning(f"Unexpected response command to {req_id}: {command} {req}")
+
+    async def _command_loop(self) -> None:
+        while True:
+            await self._command_sem.acquire()
+            req_id, command, req = self._command_queue.pop(0)
+            await self._run_event_handler(req_id, command, req)
 
     async def _try_read_loop(self) -> None:
         try:

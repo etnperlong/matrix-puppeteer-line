@@ -411,8 +411,6 @@ class Portal(DBPortal, BasePortal):
         max_mid = await DBMessage.get_max_mid(self.mxid) or 0
         messages = [msg for msg in await source.client.get_messages(self.chat_id)
                     if msg.id > max_mid]
-        # TODO Confirm why sorting in Node isn't enough
-        messages.sort(key=lambda message: message.id)
 
         if not messages:
             self.log.debug("Didn't get any entries from server")

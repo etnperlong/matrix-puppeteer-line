@@ -35,6 +35,12 @@ class Client(RPCClient):
         await self.request("stop")
         await self.disconnect()
 
+    async def pause(self) -> None:
+        await self.request("pause")
+
+    async def resume(self) -> None:
+        await self.request("resume")
+
     async def get_chats(self) -> List[ChatListInfo]:
         resp = await self.request("get_chats")
         return [ChatListInfo.deserialize(data) for data in resp]

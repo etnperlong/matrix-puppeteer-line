@@ -116,6 +116,7 @@ class User(DBUser, BaseUser):
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.set_last_message_ids(await DBMessage.get_max_mids())
         self.log.info("Syncing chats")
+        await self.client.pause()
         chats = await self.client.get_chats()
         limit = self.config["bridge.initial_conversation_sync"]
         for index, chat in enumerate(chats):
@@ -126,6 +127,7 @@ class User(DBUser, BaseUser):
                     await portal.update_matrix_room(self, chat)
                 else:
                     await portal.create_matrix_room(self, chat)
+        await self.client.resume()
 
     async def stop(self) -> None:
         if self._connection_check_task:

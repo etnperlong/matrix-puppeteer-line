@@ -103,6 +103,7 @@ export default class Client {
 		return this._write({
 			id: --this.notificationID,
 			command: "message",
+			is_sequential: true,
 			message,
 		})
 	}
@@ -230,6 +231,8 @@ export default class Client {
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
 				send_file: req => this.puppet.sendFile(req.chat_id, req.file_path),
 				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids),
+				pause: () => this.puppet.stopObserving(),
+				resume: () => this.puppet.startObserving(),
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
 				get_messages: req => this.puppet.getMessages(req.chat_id),
