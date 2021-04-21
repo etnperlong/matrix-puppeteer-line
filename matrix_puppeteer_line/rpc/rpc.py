@@ -50,8 +50,7 @@ class RPCClient:
         self._response_waiters = {}
         self._writer = None
         self._reader = None
-        self._command_queue: List[Tuple[int, str, Dict[str, Any]]] = []
-        self._command_sem = asyncio.Semaphore(0)
+        self._command_queue = asyncio.Queue()
 
     async def connect(self) -> None:
         if self._writer is not None:
@@ -120,8 +119,7 @@ class RPCClient:
             if not is_sequential:
                 self.loop.create_task(self._run_event_handler(req_id, command, req))
             else:
-                self._command_queue.append((req_id, command, req))
-                self._command_sem.release()
+                self._command_queue.put_nowait((req_id, command, req))
             return
         try:
             waiter = self._response_waiters[req_id]
@@ -137,9 +135,9 @@ class RPCClient:
 
     async def _command_loop(self) -> None:
         while True:
-            await self._command_sem.acquire()
-            req_id, command, req = self._command_queue.pop(0)
+            req_id, command, req = await self._command_queue.get()
             await self._run_event_handler(req_id, command, req)
+            self._command_queue.task_done()
 
     async def _try_read_loop(self) -> None:
         try:
