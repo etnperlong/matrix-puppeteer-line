@@ -69,6 +69,8 @@
 * Message edits
 * Formatted messages
 * Presence
+* Timestamped read receipts
+* Read receipts between users other than yourself
 
 ### Missing from LINE on Chrome
 * Message redaction (delete/unsend)

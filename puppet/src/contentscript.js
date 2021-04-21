@@ -28,6 +28,18 @@ window.__chronoParseDate = function (text, ref, option) {}
  */
 window.__mautrixReceiveChanges = function (changes) {}
 /**
+ * @param {str} chatID - The ID of the chat whose receipts are being processed.
+ * @param {str} receipt_id - The ID of the most recently-read message for the current chat.
+ * @return {Promise<void>}
+ */
+window.__mautrixReceiveReceiptDirectLatest = function (chat_id, receipt_id) {}
+/**
+ * @param {str} chatID - The ID of the chat whose receipts are being processed.
+ * @param {[Receipt]} receipts - All newly-seen receipts for the current chat.
+ * @return {Promise<void>}
+ */
+window.__mautrixReceiveReceiptMulti = function (chat_id, receipts) {}
+/**
  * @param {string} url - The URL for the QR code.
  * @return {Promise<void>}
  */
@@ -65,6 +77,7 @@ const ChatTypeEnum = Object.freeze({
 class MautrixController {
 	constructor(ownID) {
 		this.chatListObserver = null
+		this.msgListObserver = null
 		this.qrChangeObserver = null
 		this.qrAppearObserver = null
 		this.emailAppearObserver = null
@@ -91,6 +104,11 @@ class MautrixController {
 		default:
 			throw `Invalid chat ID: ${id}`
 		}
+	}
+
+	getCurrentChatId() {
+		const chatListElement = document.querySelector("#_chat_list_body > .ExSelected > .chatList")
+		return chatListElement ? this.getChatListItemId(chatListElement) : null
 	}
 
 	/**
@@ -148,6 +166,7 @@ class MautrixController {
 	 * @property {?Participant} sender - Full data of the participant who sent the message, if needed and available.
 	 * @property {?string} html        - The HTML format of the message, if necessary.
 	 * @property {?string} image_url   - The URL to the image in the message, if it's an image-only message.
+	 * @property {?int} receipt_count  - The number of users who have read the message.
 	 */
 
 	_isLoadedImageURL(src) {
@@ -167,12 +186,16 @@ class MautrixController {
 		const is_outgoing = element.classList.contains("mdRGT07Own")
 		let sender = {}
 
+		const receipt = element.querySelector(".mdRGT07Own .mdRGT07Read:not(.MdNonDisp)")
+		let receipt_count
+
 		// TODO Clean up participantsList access...
 		const participantsListSelector = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
 
 		// Don't need sender ID for direct chats, since the portal will have it already.
 		if (chatType == ChatTypeEnum.DIRECT) {
 			sender = null
+			receipt_count = is_outgoing ? (receipt ? 1 : 0) : null
 		} else if (!is_outgoing) {
 			sender.name = element.querySelector(".mdRGT07Body > .mdRGT07Ttl").innerText
 			// Room members are always friends (right?),
@@ -187,6 +210,7 @@ class MautrixController {
 				sender.id = participantsList.querySelector(`img[alt='${senderName}'`).parentElement.parentElement.getAttribute("data-mid")
 			}
 			sender.avatar = this.getParticipantListItemAvatar(element)
+			receipt_count = null
 		} else {
 			// TODO Get own ID and store it somewhere appropriate.
 			//      Unable to get own ID from a room chat...
@@ -202,6 +226,8 @@ class MautrixController {
 			sender.name = this.getParticipantListItemName(participantsList.children[0])
 			sender.avatar = this.getParticipantListItemAvatar(participantsList.children[0])
 			sender.id = this.ownID
+
+			receipt_count = receipt ? this._getReceiptCount(receipt) : null
 		}
 
 		const messageData = {
@@ -209,6 +235,7 @@ class MautrixController {
 			timestamp: date ? date.getTime() : null,
 			is_outgoing: is_outgoing,
 			sender: sender,
+			receipt_count: receipt_count
 		}
 		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
 		if (messageElement.classList.contains("mdRGT07Text")) {
@@ -253,6 +280,18 @@ class MautrixController {
 			}
 		}
 		return messageData
+	}
+
+	/**
+	 * Find the number in the "Read #" receipt message.
+	 * Don't look for "Read" specifically, to support multiple languages.
+	 *
+	 * @param {Element} receipt - The element containing the receipt message.
+	 * @private
+	 */
+	_getReceiptCount(receipt) {
+		const match = receipt.innerText.match(/\d+/)
+		return Number.parseInt(match ? match[0] : 0) || null
 	}
 
 
@@ -355,9 +394,9 @@ class MautrixController {
 	 */
 	async parseMessageList(chatId) {
 		if (!chatId) {
-			chatId = this.getChatListItemId(document.querySelector("#_chat_list_body > .ExSelected > div"))
+			chatId = this.getCurrentChatId()
 		}
-		const chatType = this.getChatType(chatId);
+		const chatType = this.getChatType(chatId)
 		const msgList = document.querySelector("#_chat_room_msg_list")
 		const messages = []
 		let refDate = null
@@ -611,6 +650,109 @@ class MautrixController {
 			this.chatListObserver.disconnect()
 			this.chatListObserver = null
 			console.debug("Disconnected chat list observer")
+		}
+	}
+
+	/**
+	 * @param {[MutationRecord]} mutations - The mutation records that occurred
+	 * @param {str} chat_id - The ID of the chat being observed.
+	 * @private
+	 */
+	_observeReceiptsDirect(mutations, chat_id) {
+		let receipt_id
+		for (const change of mutations) {
+			if ( change.target.classList.contains("mdRGT07Read") &&
+				!change.target.classList.contains("MdNonDisp")) {
+				const msgElement = change.target.closest(".mdRGT07Own")
+				if (msgElement) {
+					let id = +msgElement.getAttribute("data-local-id")
+					if (!receipt_id || receipt_id < id) {
+						receipt_id = id
+					}
+				}
+			}
+		}
+
+		if (receipt_id) {
+			window.__mautrixReceiveReceiptDirectLatest(chat_id, receipt_id).then(
+				() => console.debug(`Receipt sent for message ${receipt_id}`),
+				err => console.error(`Error sending receipt for message ${receipt_id}:`, err))
+		}
+	}
+
+	/**
+	 * @param {[MutationRecord]} mutations - The mutation records that occurred
+	 * @param {str} chat_id - The ID of the chat being observed.
+	 * @private
+	 */
+	_observeReceiptsMulti(mutations, chat_id) {
+		const receipts = []
+		for (const change of mutations) {
+			if ( change.target.classList.contains("mdRGT07Read") &&
+				!change.target.classList.contains("MdNonDisp")) {
+				const msgElement = change.target.closest(".mdRGT07Own")
+				if (msgElement) {
+					receipts.push({
+						id: +msgElement.getAttribute("data-local-id"),
+						count: this._getReceiptCount(msgElement),
+					})
+				}
+			}
+		}
+
+		if (receipts.length > 0) {
+			window.__mautrixReceiveReceiptMulti(chat_id, receipts).then(
+				() => console.debug(`Receipt sent for message ${receipt_id}`),
+				err => console.error(`Error sending receipt for message ${receipt_id}:`, err))
+		}
+	}
+
+	/**
+	 * Add a mutation observer to the message list.
+	 * Used for observing read receipts.
+	 * TODO Should also use for observing messages of the currently-viewed chat.
+	 */
+	addMsgListObserver(forceCreate) {
+		const chat_room_msg_list = document.querySelector("#_chat_room_msg_list")
+		if (!chat_room_msg_list) {
+			console.debug("Could not start msg list observer: no msg list available!")
+			return
+		}
+		if (this.msgListObserver !== null) {
+			this.removeMsgListObserver()
+		} else if (!forceCreate) {
+			console.debug("No pre-existing msg list observer to replace")
+			return
+		}
+
+		const observeReadReceipts =
+			this.getChatType(this.getCurrentChatId()) == ChatTypeEnum.DIRECT ?
+			this._observeReceiptsDirect :
+			this._observeReceiptsMulti
+
+		const chat_id = this.getCurrentChatId()
+
+		this.msgListObserver = new MutationObserver(mutations => {
+			try {
+				observeReadReceipts(mutations, chat_id)
+			} catch (err) {
+				console.error("Error observing msg list mutations:", err)
+			}
+		})
+		this.msgListObserver.observe(
+			chat_room_msg_list,
+			{ subtree: true, attributes: true, attributeFilter: ["class"], characterData: true })
+		console.debug("Started msg list observer")
+	}
+
+	/**
+	 * Disconnect the most recently added mutation observer.
+	 */
+	removeMsgListObserver() {
+		if (this.msgListObserver !== null) {
+			this.msgListObserver.disconnect()
+			this.msgListObserver = null
+			console.debug("Disconnected msg list observer")
 		}
 	}
 

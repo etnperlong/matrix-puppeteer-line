@@ -68,3 +68,39 @@ async def upgrade_media(conn: Connection) -> None:
         media_id   TEXT PRIMARY KEY,
         mxc        TEXT NOT NULL
     )""")
+
+
+@upgrade_table.register(description="Helpful table constraints")
+async def upgrade_table_constraints(conn: Connection) -> None:
+    constraint_name = "portal_mxid_key"
+    q = ( "SELECT EXISTS(SELECT FROM information_schema.constraint_table_usage "
+         f"WHERE table_name='portal' AND constraint_name='{constraint_name}')")
+    has_unique_mxid = await conn.fetchval(q)
+    if not has_unique_mxid:
+        await conn.execute(f"ALTER TABLE portal ADD CONSTRAINT {constraint_name} UNIQUE(mxid)")
+
+    constraint_name = "message_chat_id_fkey"
+    q = ( "SELECT EXISTS(SELECT FROM information_schema.table_constraints "
+         f"WHERE table_name='message' AND constraint_name='{constraint_name}')")
+    has_fkey = await conn.fetchval(q)
+    if not has_fkey:
+        await conn.execute(
+        f"ALTER TABLE message ADD CONSTRAINT {constraint_name} "
+            "FOREIGN KEY (chat_id) "
+                "REFERENCES portal (chat_id) "
+                "ON DELETE CASCADE")
+
+
+@upgrade_table.register(description="Read receipts for groups & rooms")
+async def upgrade_read_receipts(conn: Connection) -> None:
+    await conn.execute("""CREATE TABLE IF NOT EXISTS receipt_reaction (
+        mxid        TEXT NOT NULL,
+        mx_room     TEXT NOT NULL,
+        relates_to  TEXT NOT NULL,
+        num_read    INTEGER NOT NULL,
+
+        PRIMARY KEY (mxid, mx_room),
+        FOREIGN KEY (mx_room)
+            REFERENCES portal (mxid)
+            ON DELETE CASCADE
+    )""")

@@ -24,7 +24,7 @@ from mautrix.util.opt_prometheus import Gauge
 
 from .db import User as DBUser, Portal as DBPortal, Message as DBMessage
 from .config import Config
-from .rpc import Client, Message
+from .rpc import Client, Message, Receipt
 from . import puppet as pu, portal as po
 
 if TYPE_CHECKING:
@@ -94,6 +94,7 @@ class User(DBUser, BaseUser):
         self.log.debug("Starting client")
         state = await self.client.start()
         await self.client.on_message(self.handle_message)
+        await self.client.on_receipt(self.handle_receipt)
         if state.is_connected:
             self._track_metric(METRIC_CONNECTED, True)
         if state.is_logged_in:
@@ -152,6 +153,14 @@ class User(DBUser, BaseUser):
             chat_info = await self.client.get_chat(evt.chat_id)
             await portal.create_matrix_room(self, chat_info)
         await portal.handle_remote_message(self, puppet, evt)
+
+    async def handle_receipt(self, receipt: Receipt) -> None:
+        self.log.trace(f"Received receipt for chat {receipt.chat_id}")
+        portal = await po.Portal.get_by_chat_id(receipt.chat_id, create=True)
+        if not portal.mxid:
+            chat_info = await self.client.get_chat(receipt.chat_id)
+            await portal.create_matrix_room(self, chat_info)
+        await portal.handle_remote_receipt(receipt)
 
     def _add_to_cache(self) -> None:
         self.by_mxid[self.mxid] = self

@@ -108,6 +108,15 @@ export default class Client {
 		})
 	}
 
+	sendReceipt(receipt) {
+		this.log(`Sending read receipt (${receipt.count || "DM"}) of msg ${receipt.id} for chat ${receipt.chat_id}`)
+		return this._write({
+			id: --this.notificationID,
+			command: "receipt",
+			receipt
+		})
+	}
+
 	sendQRCode(url) {
 		this.log(`Sending QR ${url} to client`)
 		return this._write({

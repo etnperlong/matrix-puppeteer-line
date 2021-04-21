@@ -60,6 +60,14 @@ class Message(SerializableAttrs['Message']):
     timestamp: int = None
     html: Optional[str] = None
     image_url: Optional[str] = None
+    receipt_count: Optional[int] = None
+
+
+@dataclass
+class Receipt(SerializableAttrs['Receipt']):
+    id: int
+    chat_id: int
+    count: int = 1
 
 
 @dataclass

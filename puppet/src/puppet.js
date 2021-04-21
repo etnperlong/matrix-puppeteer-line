@@ -97,6 +97,10 @@ export default class MessagesPuppeteer {
 			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
+		await this.page.exposeFunction("__mautrixReceiveReceiptDirectLatest",
+			this._receiveReceiptDirectLatest.bind(this))
+		await this.page.exposeFunction("__mautrixReceiveReceiptMulti",
+			this._receiveReceiptMulti.bind(this))
 		await this.page.exposeFunction("__mautrixShowParticipantsList", this._showParticipantList.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
@@ -441,14 +445,19 @@ export default class MessagesPuppeteer {
 	}
 
 	async startObserving() {
-		this.log("Adding chat list observer")
+		this.log("Adding observers")
 		await this.page.evaluate(
 			() => window.__mautrixController.addChatListObserver())
+		await this.page.evaluate(
+			() => window.__mautrixController.addMsgListObserver(true))
 	}
 
 	async stopObserving() {
-		this.log("Removing chat list observer")
-		await this.page.evaluate(() => window.__mautrixController.removeChatListObserver())
+		this.log("Removing observers")
+		await this.page.evaluate(
+			() => window.__mautrixController.removeChatListObserver())
+		await this.page.evaluate(
+			() => window.__mautrixController.removeMsgListObserver())
 	}
 
 	_listItemSelector(id) {
@@ -485,6 +494,9 @@ export default class MessagesPuppeteer {
 				detailArea => detailArea.childElementCount == 0,
 				{},
 				await this.page.$("#_chat_detail_area"))
+
+			await this.page.evaluate(
+				() => window.__mautrixController.addMsgListObserver(false))
 		}
 	}
 
@@ -629,6 +641,25 @@ export default class MessagesPuppeteer {
 				this.taskQueue.push(() => this._processChatListChangeUnsafe(item))
 					.catch(err => this.error("Error handling chat list changes:", err))
 			}
+		}
+	}
+
+	_receiveReceiptDirectLatest(chat_id, receipt_id) {
+		this.log(`Received read receipt ${receipt_id} for chat ${chat_id}`)
+		this.taskQueue.push(() => this.client.sendReceipt({chat_id: chat_id, id: receipt_id}))
+			.catch(err => this.error("Error handling read receipt changes:", err))
+	}
+
+	_receiveReceiptMulti(chat_id, receipts) {
+		this.log(`Received bulk read receipts for chat ${chat_id}:`, receipts)
+		this.taskQueue.push(() => this._receiveReceiptMulti(chat_id, receipts))
+			.catch(err => this.error("Error handling read receipt changes:", err))
+	}
+
+	async _receiveReceiptMultiUnsafe(chat_id, receipts) {
+		for (receipt of receipts) {
+			receipt.chat_id = chat_id
+			await this.client.sendReceipt(receipt)
 		}
 	}
 

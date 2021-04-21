@@ -33,9 +33,9 @@ from mautrix.errors import MatrixError
 from mautrix.util.simple_lock import SimpleLock
 from mautrix.util.network_retry import call_with_net_retry
 
-from .db import Portal as DBPortal, Message as DBMessage, Media as DBMedia
+from .db import Portal as DBPortal, Message as DBMessage, ReceiptReaction as DBReceiptReaction, Media as DBMedia
 from .config import Config
-from .rpc import ChatInfo, Participant, Message, Client, PathImage
+from .rpc import ChatInfo, Participant, Message, Receipt, Client, PathImage
 from . import user as u, puppet as p, matrix as m
 
 if TYPE_CHECKING:
@@ -77,7 +77,6 @@ class Portal(DBPortal, BasePortal):
         self.backfill_lock = SimpleLock("Waiting for backfilling to finish before handling %s",
                                         log=self.log)
         self._main_intent = None
-        self._reaction_lock = asyncio.Lock()
         self._last_participant_update = set()
 
     @property
@@ -271,10 +270,36 @@ class Portal(DBPortal, BasePortal):
                 body=msg_text, formatted_body=msg_html)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         if event_id:
+            if evt.is_outgoing and evt.receipt_count:
+                await self._handle_receipt(event_id, evt.receipt_count)
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
             await msg.insert()
             await self._send_delivery_receipt(event_id)
             self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
+
+    async def handle_remote_receipt(self, receipt: Receipt) -> None:
+        msg = await DBMessage.get_by_mid(receipt.id)
+        if msg:
+            await self._handle_receipt(msg.mxid, receipt.count)
+        else:
+            self.log.debug(f"Could not find message for read receipt {receipt.id}")
+
+    async def _handle_receipt(self, event_id: EventID, receipt_count: int) -> None:
+        if self.is_direct:
+            await self.main_intent.send_receipt(self.mxid, event_id)
+        else:
+            reaction = await DBReceiptReaction.get_by_relation(event_id, self.mxid)
+            if reaction:
+                await self.main_intent.redact(self.mxid, reaction.mxid)
+                await reaction.delete()
+            if receipt_count == len(self._last_participant_update) - 1:
+                for participant in self._last_participant_update:
+                    puppet = await p.Puppet.get_by_mid(participant.id)
+                    await puppet.intent.send_receipt(self.mxid, event_id)
+            else:
+                # TODO Translatable string for "Read by"
+                reaction_mxid = await self.main_intent.react(self.mxid, event_id, f"(Read by {receipt_count})")
+                await DBReceiptReaction(reaction_mxid, self.mxid, event_id, receipt_count).insert()
 
     async def _handle_remote_photo(self, source: 'u.User', intent: IntentAPI, message: Message
                                    ) -> Optional[MediaMessageEventContent]:
@@ -530,6 +555,9 @@ class Portal(DBPortal, BasePortal):
                 "users": {
                     self.az.bot_mxid: 100,
                     self.main_intent.mxid: 100,
+                },
+                "events": {
+                    str(EventType.REACTION): 1
                 }
             }
         })

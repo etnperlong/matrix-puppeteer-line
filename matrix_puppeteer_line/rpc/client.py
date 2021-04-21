@@ -19,7 +19,7 @@ from base64 import b64decode
 import asyncio
 
 from .rpc import RPCClient
-from .types import ChatListInfo, ChatInfo, Message, ImageData, StartStatus
+from .types import ChatListInfo, ChatInfo, Message, Receipt, ImageData, StartStatus
 
 
 class LoginCommand(TypedDict):
@@ -91,6 +91,12 @@ class Client(RPCClient):
             await func(Message.deserialize(data["message"]))
 
         self.add_event_handler("message", wrapper)
+
+    async def on_receipt(self, func: Callable[[Receipt], Awaitable[None]]) -> None:
+        async def wrapper(data: Dict[str, Any]) -> None:
+            await func(Receipt.deserialize(data["receipt"]))
+
+        self.add_event_handler("receipt", wrapper)
 
     # TODO Type hint for sender
     async def login(self, sender, **login_data) -> AsyncGenerator[Tuple[str, str], None]:
