@@ -148,6 +148,7 @@ class User(DBUser, BaseUser):
         portal = await po.Portal.get_by_chat_id(evt.chat_id, create=True)
         puppet = await pu.Puppet.get_by_mid(evt.sender.id) if not portal.is_direct else None
         if not portal.mxid:
+            await self.client.set_last_message_ids(await DBMessage.get_max_mids())
             chat_info = await self.client.get_chat(evt.chat_id)
             await portal.create_matrix_room(self, chat_info)
         await portal.handle_remote_message(self, puppet, evt)

@@ -344,17 +344,17 @@ export default class MessagesPuppeteer {
 	/**
 	 * Get info about a chat.
 	 *
-	 * @param {number} id - The chat ID whose info to get.
+	 * @param {string} chatID - The chat ID whose info to get.
 	 * @return {Promise<ChatInfo>} - Info about the chat.
 	 */
-	async getChatInfo(id) {
-		return await this.taskQueue.push(() => this._getChatInfoUnsafe(id))
+	async getChatInfo(chatID) {
+		return await this.taskQueue.push(() => this._getChatInfoUnsafe(chatID))
 	}
 
 	/**
 	 * Send a message to a chat.
 	 *
-	 * @param {number} chatID - The ID of the chat to send a message to.
+	 * @param {string} chatID - The ID of the chat to send a message to.
 	 * @param {string} text   - The text to send.
 	 * @return {Promise<{id: number}>} - The ID of the sent message.
 	 */
@@ -365,25 +365,31 @@ export default class MessagesPuppeteer {
 	/**
 	 * Get messages in a chat.
 	 *
-	 * @param {number} id The ID of the chat whose messages to get.
+	 * @param {string} chatID The ID of the chat whose messages to get.
 	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
 	 */
-	async getMessages(id) {
+	async getMessages(chatID) {
 		return this.taskQueue.push(async () => {
-			const messages = await this._getMessagesUnsafe(id)
+			const messages = await this._getMessagesUnsafe(chatID)
 			if (messages.length > 0) {
-				this.mostRecentMessages.set(id, messages[messages.length - 1].id)
+				// TODO Commonize this
+				const newFirstID = messages[0].id
+				const newLastID = messages[messages.length - 1].id
+				this.mostRecentMessages.set(chatID, newLastID)
+				const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
+				this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range}`)
 			}
 			for (const message of messages) {
-				message.chat_id = id
+				message.chat_id = chatID
 			}
 			return messages
 		})
 	}
 
 	setLastMessageIDs(ids) {
+		this.mostRecentMessages.clear()
 		for (const [chatID, messageID] of Object.entries(ids)) {
-			this.mostRecentMessages.set(+chatID, messageID)
+			this.mostRecentMessages.set(chatID, messageID)
 		}
 		this.log("Updated most recent message ID map:", this.mostRecentMessages)
 	}
@@ -449,10 +455,10 @@ export default class MessagesPuppeteer {
 		return `#_chat_list_body div[data-chatid="${id}"]`
 	}
 
-	async _switchChat(id) {
+	async _switchChat(chatID) {
 		// TODO Allow passing in an element directly
-		this.log(`Switching to chat ${id}`)
-		const chatListItem = await this.page.$(this._listItemSelector(id))
+		this.log(`Switching to chat ${chatID}`)
+		const chatListItem = await this.page.$(this._listItemSelector(chatID))
 
 		const chatName = await chatListItem.evaluate(
 			element => window.__mautrixController.getChatListItemName(element))
@@ -499,14 +505,14 @@ export default class MessagesPuppeteer {
 		//return participantList
 	}
 
-	async _getChatInfoUnsafe(id) {
-		const chatListItem = await this.page.$(this._listItemSelector(id))
+	async _getChatInfoUnsafe(chatID) {
+		const chatListItem = await this.page.$(this._listItemSelector(chatID))
 		const chatListInfo = await chatListItem.evaluate(
-			(element, id) => window.__mautrixController.parseChatListItem(element, id),
-			id)
+			(element, chatID) => window.__mautrixController.parseChatListItem(element, chatID),
+			chatID)
 
 		let [isDirect, isGroup, isRoom] = [false,false,false]
-		switch (id.charAt(0)) {
+		switch (chatID.charAt(0)) {
 		case "u":
 			isDirect = true
 			break
@@ -522,18 +528,18 @@ export default class MessagesPuppeteer {
 		if (!isDirect) {
 			this.log("Found multi-user chat, so clicking chat header to get participants")
 			// TODO This will mark the chat as "read"!
-			await this._switchChat(id)
+			await this._switchChat(chatID)
 			const participantList = await this.getParticipantList()
 			// TODO Is a group not actually created until a message is sent(?)
 			// 		If so, maybe don't create a portal until there is a message.
 			participants = await participantList.evaluate(
 				element => window.__mautrixController.parseParticipantList(element))
 		} else {
-			this.log(`Found direct chat with ${id}`)
+			this.log(`Found direct chat with ${chatID}`)
 			//const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
-				id: id,
+				id: chatID,
 				avatar: chatListInfo.icon,
 				name: chatListInfo.name,
 			}]
@@ -576,35 +582,37 @@ export default class MessagesPuppeteer {
 	// TODO Inbound read receipts
 	// 		Probably use a MutationObserver mapped to msgID
 
-	async _getMessagesUnsafe(id, minID = 0) {
+	async _getMessagesUnsafe(chatID) {
 		// TODO Also handle "decrypting" state
 		// TODO Handle unloaded messages. Maybe scroll up
 		// TODO This will mark the chat as "read"!
-		await this._switchChat(id)
-		this.log("Waiting for messages to load")
+		await this._switchChat(chatID)
+		const minID = this.mostRecentMessages.get(chatID) || 0
+		this.log(`Waiting for messages newer than ${minID}`)
 		const messages = await this.page.evaluate(
-			id => window.__mautrixController.parseMessageList(id), id)
-		return messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+			chatID => window.__mautrixController.parseMessageList(chatID), chatID)
+		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+		this.log(`Found messages: ${messages.length} total, ${filtered_messages.length} new`)
+		return filtered_messages
 	}
 
-	async _processChatListChangeUnsafe(id) {
-		this.updatedChats.delete(id)
-		this.log("Processing change to", id)
-		const lastMsgID = this.mostRecentMessages.get(id) || 0
-		const messages = await this._getMessagesUnsafe(id, lastMsgID)
+	async _processChatListChangeUnsafe(chatID) {
+		this.updatedChats.delete(chatID)
+		this.log("Processing change to", chatID)
+		const messages = await this._getMessagesUnsafe(chatID)
 		if (messages.length === 0) {
-			this.log("No new messages found in", id)
+			this.log("No new messages found in", chatID)
 			return
 		}
 		const newFirstID = messages[0].id
 		const newLastID = messages[messages.length - 1].id
-		this.mostRecentMessages.set(id, newLastID)
+		this.mostRecentMessages.set(chatID, newLastID)
 		const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
-		this.log(`Loaded ${messages.length} messages in ${id} after ${lastMsgID}: got ${range}`)
+		this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range}`)
 
 		if (this.client) {
 			for (const message of messages) {
-				message.chat_id = id
+				message.chat_id = chatID
 				await this.client.sendMessage(message).catch(err =>
 					this.error("Failed to send message", message.id, "to client:", err))
 			}

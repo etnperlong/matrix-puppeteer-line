@@ -16,10 +16,10 @@
 from typing import TYPE_CHECKING
 
 from mautrix.bridge import BaseMatrixHandler
-from mautrix.types import (Event, ReactionEvent, MessageEvent, StateEvent, EncryptedEvent, RoomID,
-                           RedactionEvent)
+from mautrix.types import (Event, ReactionEvent, MessageEvent, StateEvent, EncryptedEvent, RedactionEvent,
+                           EventID, RoomID, UserID)
 
-from . import puppet as pu, user as u
+from . import portal as po, puppet as pu, user as u
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
@@ -48,3 +48,14 @@ class MatrixHandler(BaseMatrixHandler):
             await inviter.update()
             await self.az.intent.send_notice(room_id, "This room has been marked as your "
                                                       "LINE bridge notice room.")
+
+    async def handle_leave(self, room_id: RoomID, user_id: UserID, event_id: EventID) -> None:
+        portal = await po.Portal.get_by_mxid(room_id)
+        if not portal:
+            return
+
+        user = await u.User.get_by_mxid(user_id, create=False)
+        if not user:
+            return
+
+        await portal.handle_matrix_leave(user)

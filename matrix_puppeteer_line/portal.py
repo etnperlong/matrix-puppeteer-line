@@ -56,7 +56,7 @@ ReuploadedMediaInfo = NamedTuple('ReuploadedMediaInfo', mxc=Optional[ContentURI]
 class Portal(DBPortal, BasePortal):
     invite_own_puppet_to_pm: bool = False
     by_mxid: Dict[RoomID, 'Portal'] = {}
-    by_chat_id: Dict[int, 'Portal'] = {}
+    by_chat_id: Dict[str, 'Portal'] = {}
     config: Config
     matrix: 'm.MatrixHandler'
     az: AppService
@@ -66,7 +66,7 @@ class Portal(DBPortal, BasePortal):
     backfill_lock: SimpleLock
     _last_participant_update: Set[str]
 
-    def __init__(self, chat_id: int, other_user: Optional[str] = None,
+    def __init__(self, chat_id: str, other_user: Optional[str] = None,
                  mxid: Optional[RoomID] = None, name: Optional[str] = None,
                  icon_path: Optional[str] = None, icon_mxc: Optional[ContentURI] = None,
                  encrypted: bool = False) -> None:
@@ -100,6 +100,7 @@ class Portal(DBPortal, BasePortal):
 
     @classmethod
     def init_cls(cls, bridge: 'MessagesBridge') -> None:
+        BasePortal.bridge = bridge
         cls.config = bridge.config
         cls.matrix = bridge.matrix
         cls.az = bridge.az
@@ -163,13 +164,15 @@ class Portal(DBPortal, BasePortal):
             self.log.warning(f"Handled Matrix message {event_id} -> {message_id}")
 
     async def handle_matrix_leave(self, user: 'u.User') -> None:
-        if self.is_direct:
-            self.log.info(f"{user.mxid} left private chat portal with {self.other_user}, "
-                          f"cleaning up and deleting...")
-            await self.cleanup_and_delete()
-        else:
-            self.log.debug(f"{user.mxid} left portal to {self.chat_id}")
-            # TODO cleanup if empty
+        self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
+                      f"cleaning up and deleting...")
+        if self.invite_own_puppet_to_pm:
+            # TODO Use own puppet instead of bridge bot. Then cleanup_and_delete will handle it
+            try:
+                await self.az.intent.leave_room(self.mxid)
+            except MatrixError:
+                pass
+        await self.cleanup_and_delete()
 
     async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
                                      invite: bool = True) -> Optional[IntentAPI]:
@@ -586,14 +589,12 @@ class Portal(DBPortal, BasePortal):
             self._main_intent = self.az.intent
 
     async def delete(self) -> None:
-        await DBMessage.delete_all(self.mxid)
+        if self.mxid:
+            # TODO Handle this with db foreign keys instead
+            await DBMessage.delete_all(self.mxid)
+        self.by_chat_id.pop(self.chat_id, None)
         self.by_mxid.pop(self.mxid, None)
-        self.mxid = None
-        self.name = None
-        self.icon_path = None
-        self.icon_mxc = None
-        self.encrypted = False
-        await self.update()
+        await super().delete()
 
     async def save(self) -> None:
         await self.update()
@@ -624,7 +625,7 @@ class Portal(DBPortal, BasePortal):
         return None
 
     @classmethod
-    async def get_by_chat_id(cls, chat_id: int, create: bool = False) -> Optional['Portal']:
+    async def get_by_chat_id(cls, chat_id: str, create: bool = False) -> Optional['Portal']:
         try:
             return cls.by_chat_id[chat_id]
         except KeyError:

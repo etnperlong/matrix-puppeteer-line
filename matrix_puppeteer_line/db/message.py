@@ -30,7 +30,7 @@ class Message:
     mxid: EventID
     mx_room: RoomID
     mid: int
-    chat_id: int
+    chat_id: str
 
     async def insert(self) -> None:
         q = "INSERT INTO message (mxid, mx_room, mid, chat_id) VALUES ($1, $2, $3, $4)"
@@ -49,7 +49,7 @@ class Message:
         return await cls.db.fetchval("SELECT MAX(mid) FROM message WHERE mx_room=$1", room_id)
 
     @classmethod
-    async def get_max_mids(cls) -> Dict[int, int]:
+    async def get_max_mids(cls) -> Dict[str, int]:
         rows = await cls.db.fetch("SELECT chat_id, MAX(mid) AS max_mid "
                                   "FROM message GROUP BY chat_id")
         data = {}

@@ -45,10 +45,10 @@ class Client(RPCClient):
         resp = await self.request("get_chats")
         return [ChatListInfo.deserialize(data) for data in resp]
 
-    async def get_chat(self, chat_id: int) -> ChatInfo:
+    async def get_chat(self, chat_id: str) -> ChatInfo:
         return ChatInfo.deserialize(await self.request("get_chat", chat_id=chat_id))
 
-    async def get_messages(self, chat_id: int) -> List[Message]:
+    async def get_messages(self, chat_id: str) -> List[Message]:
         resp = await self.request("get_messages", chat_id=chat_id)
         return [Message.deserialize(data) for data in resp]
 
@@ -75,15 +75,15 @@ class Client(RPCClient):
         resp = await self.request("is_connected")
         return resp["is_connected"]
 
-    async def send(self, chat_id: int, text: str) -> int:
+    async def send(self, chat_id: str, text: str) -> int:
         resp = await self.request("send", chat_id=chat_id, text=text)
         return resp["id"]
 
-    async def send_file(self, chat_id: int, file_path: str) -> int:
+    async def send_file(self, chat_id: str, file_path: str) -> int:
         resp = await self.request("send_file", chat_id=chat_id, file_path=file_path)
         return resp["id"]
 
-    async def set_last_message_ids(self, msg_ids: Dict[int, int]) -> None:
+    async def set_last_message_ids(self, msg_ids: Dict[str, int]) -> None:
         await self.request("set_last_message_ids", msg_ids=msg_ids)
 
     async def on_message(self, func: Callable[[Message], Awaitable[None]]) -> None:

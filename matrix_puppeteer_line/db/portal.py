@@ -50,6 +50,10 @@ class Portal:
                               self.icon_path, self.icon_mxc,
                               self.encrypted)
 
+    async def delete(self) -> None:
+        q = "DELETE FROM portal WHERE chat_id=$1"
+        await self.db.execute(q, self.chat_id)
+
     @classmethod
     async def get_by_mxid(cls, mxid: RoomID) -> Optional['Portal']:
         q = ("SELECT chat_id, other_user, mxid, name, icon_path, icon_mxc, encrypted "
@@ -60,7 +64,7 @@ class Portal:
         return cls(**row)
 
     @classmethod
-    async def get_by_chat_id(cls, chat_id: int) -> Optional['Portal']:
+    async def get_by_chat_id(cls, chat_id: str) -> Optional['Portal']:
         q = ("SELECT chat_id, other_user, mxid, name, icon_path, icon_mxc, encrypted "
              "FROM portal WHERE chat_id=$1")
         row = await cls.db.fetchrow(q, chat_id)
