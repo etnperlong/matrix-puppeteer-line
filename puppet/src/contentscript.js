@@ -28,6 +28,12 @@ window.__chronoParseDate = function (text, ref, option) {}
  */
 window.__mautrixReceiveChanges = function (changes) {}
 /**
+ * @param {string} messages - The ID of the chat receiving messages.
+ * @param {MessageData[]} messages - The messages added to a chat.
+ * @return {Promise<void>}
+ */
+window.__mautrixReceiveMessages = function (chatID, messages) {}
+/**
  * @param {str} chatID - The ID of the chat whose receipts are being processed.
  * @param {str} receipt_id - The ID of the most recently-read message for the current chat.
  * @return {Promise<void>}
@@ -78,6 +84,7 @@ class MautrixController {
 	constructor(ownID) {
 		this.chatListObserver = null
 		this.msgListObserver = null
+		this.receiptObserver = null
 		this.qrChangeObserver = null
 		this.qrAppearObserver = null
 		this.emailAppearObserver = null
@@ -106,9 +113,9 @@ class MautrixController {
 		}
 	}
 
-	getCurrentChatId() {
+	getCurrentChatID() {
 		const chatListElement = document.querySelector("#_chat_list_body > .ExSelected > .chatList")
-		return chatListElement ? this.getChatListItemId(chatListElement) : null
+		return chatListElement ? this.getChatListItemID(chatListElement) : null
 	}
 
 	/**
@@ -182,7 +189,7 @@ class MautrixController {
 	 * @return {MessageData}
 	 * @private
 	 */
-	async _tryParseMessage(date, element, chatType) {
+	async _parseMessage(date, element, chatType) {
 		const is_outgoing = element.classList.contains("mdRGT07Own")
 		let sender = {}
 
@@ -386,38 +393,35 @@ class MautrixController {
 		})
 	}
 
-	/**
-	 * Parse the message list of whatever the currently-viewed chat is.
-	 *
-	 * @param {?string} chatId - The ID of the currently-viewed chat, if known.
-	 * @return {[MessageData]} - A list of messages.
-	 */
-	async parseMessageList(chatId) {
-		if (!chatId) {
-			chatId = this.getCurrentChatId()
-		}
-		const chatType = this.getChatType(chatId)
-		const msgList = document.querySelector("#_chat_room_msg_list")
+	async _tryParseMessages(msgList, chatType) {
 		const messages = []
 		let refDate = null
-		for (const child of msgList.children) {
-			if (child.tagName == "DIV") {
-				if (child.classList.contains("mdRGT10Date")) {
-					refDate = await this._tryParseDayDate(child.firstElementChild.innerText)
-				}
-				else if (child.classList.contains("MdRGT07Cont")) {
-					// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
-					// 		but that is unlikely to be a problem here.
-					// 		Also, offscreen times may have .MdNonDisp on them
-					const timeElement = child.querySelector("time")
-					if (timeElement) {
-						const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
-						messages.push(await this._tryParseMessage(messageDate, child, chatType))
-					}
+		for (const child of msgList) {
+			if (child.classList.contains("mdRGT10Date")) {
+				refDate = await this._tryParseDayDate(child.firstElementChild.innerText)
+			} else if (child.classList.contains("MdRGT07Cont")) {
+				// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
+				// 		but that is unlikely to be a problem here.
+				// 		Also, offscreen times may have .MdNonDisp on them
+				const timeElement = child.querySelector("time")
+				if (timeElement) {
+					const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
+					messages.push(await this._parseMessage(messageDate, child, chatType))
 				}
 			}
 		}
 		return messages
+	}
+
+	/**
+	 * Parse the message list of whatever the currently-viewed chat is.
+	 *
+	 * @return {[MessageData]} - A list of messages.
+	 */
+	async parseMessageList() {
+		const msgList = Array.from(document.querySelectorAll("#_chat_room_msg_list > div[data-local-id]"))
+		msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
+		return await this._tryParseMessages(msgList, this.getChatType(this.getCurrentChatID()))
 	}
 
 	/**
@@ -457,7 +461,7 @@ class MautrixController {
 		return this._getPathImage(element.querySelector(".mdRGT13Img img[src]"))
 	}
 
-	getParticipantListItemId(element) {
+	getParticipantListItemID(element) {
 		// TODO Cache own ID
 		return element.getAttribute("data-mid")
 	}
@@ -483,7 +487,7 @@ class MautrixController {
 
 		return [ownParticipant].concat(Array.from(element.children).slice(1).map(child => {
 			const name = this.getParticipantListItemName(child)
-			const id = this.getParticipantListItemId(child) || this.getUserIdFromFriendsList(name)
+			const id = this.getParticipantListItemID(child) || this.getUserIdFromFriendsList(name)
 			return {
 				id: id, // NOTE Don't want non-own user's ID to ever be null.
 				avatar: this.getParticipantListItemAvatar(child),
@@ -504,7 +508,7 @@ class MautrixController {
 	 *                                  (e.g. "7:16 PM", "Thu" or "Aug 4")
 	 */
 
-	getChatListItemId(element) {
+	getChatListItemID(element) {
 		return element.getAttribute("data-chatid")
 	}
 
@@ -528,12 +532,12 @@ class MautrixController {
 	 * Parse a conversation list item element.
 	 *
 	 * @param {Element} element - The element to parse.
-	 * @param {?string} knownId - The ID of this element, if it is known.
+	 * @param {?string} knownID - The ID of this element, if it is known.
 	 * @return {ChatListInfo}   - The info in the element.
 	 */
-	parseChatListItem(element, knownId) {
+	parseChatListItem(element, knownID) {
 		return !element.classList.contains("chatList") ? null : {
-			id: knownId || this.getChatListItemId(element),
+			id: knownID || this.getChatListItemID(element),
 			name: this.getChatListItemName(element),
 			icon: this.getChatListItemIcon(element),
 			lastMsg: this.getChatListItemLastMsg(element),
@@ -599,9 +603,11 @@ class MautrixController {
 				for (const node of change.addedNodes) {
 				}
 				*/
-			}
-			else if (change.target.tagName == "LI")
-			{
+			} else if (change.target.tagName == "LI") {
+				if (!change.target.classList.contains("ExSelected")) {
+					console.log("Not using chat list mutation response for currently-active chat")
+					continue
+				}
 				for (const node of change.addedNodes) {
 					const chat = this.parseChatListItem(node)
 					if (chat) {
@@ -626,9 +632,7 @@ class MautrixController {
 	 * Add a mutation observer to the chat list.
 	 */
 	addChatListObserver() {
-		if (this.chatListObserver !== null) {
-			this.removeChatListObserver()
-		}
+		this.removeChatListObserver()
 		this.chatListObserver = new MutationObserver(mutations => {
 			try {
 				this._observeChatListMutations(mutations)
@@ -686,80 +690,108 @@ class MautrixController {
 	 * @private
 	 */
 	_observeReceiptsMulti(mutations, chat_id) {
+		const ids = new Set()
 		const receipts = []
 		for (const change of mutations) {
-			if ( change.target.classList.contains("mdRGT07Read") &&
-				!change.target.classList.contains("MdNonDisp")) {
+			let success = false
+			if (change.type == "attributes") {
+				if ( change.target.classList.contains("mdRGT07Read") &&
+					!change.target.classList.contains("MdNonDisp")) {
+					success = true
+				}
+			} else if (change.type == "characterData") {
+				success = true
+			}
+			if (success) {
 				const msgElement = change.target.closest(".mdRGT07Own")
 				if (msgElement) {
-					receipts.push({
-						id: +msgElement.getAttribute("data-local-id"),
-						count: this._getReceiptCount(msgElement),
-					})
+					const id = +msgElement.getAttribute("data-local-id")
+					if (!ids.has(id)) {
+						ids.add(id)
+						receipts.push({
+							id: id,
+							count: this._getReceiptCount(change.target),
+						})
+					}
 				}
 			}
 		}
 
 		if (receipts.length > 0) {
 			window.__mautrixReceiveReceiptMulti(chat_id, receipts).then(
-				() => console.debug(`Receipt sent for message ${receipt_id}`),
-				err => console.error(`Error sending receipt for message ${receipt_id}:`, err))
+				() => console.debug(`Receipts sent for ${receipts.length} messages`),
+				err => console.error(`Error sending receipts for ${receipts.length} messages`, err))
 		}
 	}
 
 	/**
-	 * Add a mutation observer to the message list.
-	 * Used for observing read receipts.
-	 * TODO Should also use for observing messages of the currently-viewed chat.
+	 * Add a mutation observer to the message list of the current chat.
+	 * Used for observing new messages & read receipts.
 	 */
-	addMsgListObserver(forceCreate) {
+	addMsgListObserver() {
 		const chat_room_msg_list = document.querySelector("#_chat_room_msg_list")
 		if (!chat_room_msg_list) {
 			console.debug("Could not start msg list observer: no msg list available!")
 			return
 		}
-		if (this.msgListObserver !== null) {
-			this.removeMsgListObserver()
-		} else if (!forceCreate) {
-			console.debug("No pre-existing msg list observer to replace")
-			return
-		}
+		this.removeMsgListObserver()
 
-		const observeReadReceipts =
-			this.getChatType(this.getCurrentChatId()) == ChatTypeEnum.DIRECT ?
+		const chatID = this.getCurrentChatID()
+		const chatType = this.getChatType(chatID)
+
+		this.msgListObserver = new MutationObserver(async (changes) => {
+			for (const change of changes) {
+				const msgList = Array.from(change.addedNodes).filter(
+					child => child.tagName == "DIV" && child.hasAttribute("data-local-id"))
+				msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
+				window.__mautrixReceiveMessages(chatID, await this._tryParseMessages(msgList, chatType))
+			}
+		})
+		this.msgListObserver.observe(chat_room_msg_list,
+			{ childList: true })
+
+		console.debug("Started msg list observer")
+
+
+		const observeReadReceipts = (
+			chatType == ChatTypeEnum.DIRECT ?
 			this._observeReceiptsDirect :
 			this._observeReceiptsMulti
+			).bind(this)
 
-		const chat_id = this.getCurrentChatId()
-
-		this.msgListObserver = new MutationObserver(mutations => {
+		this.receiptObserver = new MutationObserver(changes => {
 			try {
-				observeReadReceipts(mutations, chat_id)
+				observeReadReceipts(changes, chatID)
 			} catch (err) {
 				console.error("Error observing msg list mutations:", err)
 			}
 		})
-		this.msgListObserver.observe(
+		this.receiptObserver.observe(
 			chat_room_msg_list,
-			{ subtree: true, attributes: true, attributeFilter: ["class"], characterData: true })
-		console.debug("Started msg list observer")
+			{ subtree: true, attributes: true, attributeFilter: ["class"] })
+
+		console.debug("Started receipt observer")
 	}
 
-	/**
-	 * Disconnect the most recently added mutation observer.
-	 */
 	removeMsgListObserver() {
+		let result = false
 		if (this.msgListObserver !== null) {
 			this.msgListObserver.disconnect()
 			this.msgListObserver = null
 			console.debug("Disconnected msg list observer")
+			result = true
 		}
+		if (this.receiptObserver !== null) {
+			this.receiptObserver.disconnect()
+			this.receiptObserver = null
+			console.debug("Disconnected receipt observer")
+			result = true
+		}
+		return result
 	}
 
 	addQRChangeObserver(element) {
-		if (this.qrChangeObserver !== null) {
-			this.removeQRChangeObserver()
-		}
+		this.removeQRChangeObserver()
 		this.qrChangeObserver = new MutationObserver(changes => {
 			for (const change of changes) {
 				if (change.attributeName === "title" && change.target instanceof Element) {
@@ -781,9 +813,7 @@ class MautrixController {
 	}
 
 	addQRAppearObserver(element) {
-		if (this.qrAppearObserver !== null) {
-			this.removeQRAppearObserver()
-		}
+		this.removeQRAppearObserver()
 		this.qrAppearObserver = new MutationObserver(changes => {
 			for (const change of changes) {
 				for (const node of change.addedNodes) {
@@ -809,9 +839,7 @@ class MautrixController {
 	}
 
 	addEmailAppearObserver(element) {
-		if (this.emailAppearObserver !== null) {
-			this.removeEmailAppearObserver()
-		}
+		this.removeEmailAppearObserver()
 		this.emailAppearObserver = new MutationObserver(changes => {
 			for (const change of changes) {
 				for (const node of change.addedNodes) {
@@ -836,9 +864,7 @@ class MautrixController {
 	}
 
 	addPINAppearObserver(element) {
-		if (this.pinAppearObserver !== null) {
-			this.removePINAppearObserver()
-		}
+		this.removePINAppearObserver()
 		this.pinAppearObserver = new MutationObserver(changes => {
 			for (const change of changes) {
 				for (const node of change.addedNodes) {
@@ -863,9 +889,7 @@ class MautrixController {
 	}
 
 	addExpiryObserver(element) {
-		if (this.expiryObserver !== null) {
-			this.removeExpiryObserver()
-		}
+		this.removeExpiryObserver()
 		const button = element.querySelector("dialog button")
 		this.expiryObserver = new MutationObserver(changes => {
 			if (changes.length == 1 && !changes[0].target.classList.contains("MdNonDisp")) {

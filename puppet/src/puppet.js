@@ -97,6 +97,8 @@ export default class MessagesPuppeteer {
 			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
+		await this.page.exposeFunction("__mautrixReceiveMessages",
+			this._receiveMessages.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveReceiptDirectLatest",
 			this._receiveReceiptDirectLatest.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveReceiptMulti",
@@ -366,6 +368,21 @@ export default class MessagesPuppeteer {
 		return { id: await this.taskQueue.push(() => this._sendMessageUnsafe(chatID, text)) }
 	}
 
+	_filterMessages(chatID, messages) {
+		const minID = this.mostRecentMessages.get(chatID) || 0
+		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+
+		let range = 0
+		if (filtered_messages.length > 0) {
+			const newFirstID = filtered_messages[0].id
+			const newLastID = filtered_messages[filtered_messages.length - 1].id
+			this.mostRecentMessages.set(chatID, newLastID)
+			range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
+		}
+		this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range} newer than ${minID}`)
+		return filtered_messages
+	}
+
 	/**
 	 * Get messages in a chat.
 	 *
@@ -376,15 +393,9 @@ export default class MessagesPuppeteer {
 		return this.taskQueue.push(async () => {
 			const messages = await this._getMessagesUnsafe(chatID)
 			if (messages.length > 0) {
-				// TODO Commonize this
-				const newFirstID = messages[0].id
-				const newLastID = messages[messages.length - 1].id
-				this.mostRecentMessages.set(chatID, newLastID)
-				const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
-				this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range}`)
-			}
-			for (const message of messages) {
-				message.chat_id = chatID
+				for (const message of messages) {
+					message.chat_id = chatID
+				}
 			}
 			return messages
 		})
@@ -449,7 +460,7 @@ export default class MessagesPuppeteer {
 		await this.page.evaluate(
 			() => window.__mautrixController.addChatListObserver())
 		await this.page.evaluate(
-			() => window.__mautrixController.addMsgListObserver(true))
+			() => window.__mautrixController.addMsgListObserver())
 	}
 
 	async stopObserving() {
@@ -482,6 +493,10 @@ export default class MessagesPuppeteer {
 		if (await this.page.evaluate(isCorrectChatVisible, chatName)) {
 			this.log("Already viewing chat, no need to switch")
 		} else {
+			this.log("Switching chat, so remove msg list observer")
+			const hadMsgListObserver = await this.page.evaluate(
+				() => window.__mautrixController.removeMsgListObserver())
+
 			await chatListItem.click()
 			this.log(`Waiting for chat header title to be "${chatName}"`)
 			await this.page.waitForFunction(
@@ -495,8 +510,13 @@ export default class MessagesPuppeteer {
 				{},
 				await this.page.$("#_chat_detail_area"))
 
-			await this.page.evaluate(
-				() => window.__mautrixController.addMsgListObserver(false))
+			if (hadMsgListObserver) {
+				this.log("Restoring msg list observer")
+				await this.page.evaluate(
+					() => window.__mautrixController.addMsgListObserver())
+			} else {
+				this.log("Not restoring msg list observer, as there never was one")
+			}
 		}
 	}
 
@@ -591,21 +611,29 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	// TODO Inbound read receipts
-	// 		Probably use a MutationObserver mapped to msgID
+	_receiveMessages(chatID, messages) {
+		if (this.client) {
+			messages = this._filterMessages(chatID, messages)
+			if (messages.length > 0) {
+				for (const message of messages) {
+					message.chat_id = chatID
+					this.client.sendMessage(message).catch(err =>
+						this.error("Failed to send message", message.id, "to client:", err))
+				}
+			}
+		} else {
+			this.log("No client connected, not sending messages")
+		}
+	}
 
 	async _getMessagesUnsafe(chatID) {
 		// TODO Also handle "decrypting" state
 		// TODO Handle unloaded messages. Maybe scroll up
 		// TODO This will mark the chat as "read"!
 		await this._switchChat(chatID)
-		const minID = this.mostRecentMessages.get(chatID) || 0
-		this.log(`Waiting for messages newer than ${minID}`)
-		const messages = await this.page.evaluate(
-			chatID => window.__mautrixController.parseMessageList(chatID), chatID)
-		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
-		this.log(`Found messages: ${messages.length} total, ${filtered_messages.length} new`)
-		return filtered_messages
+		const messages = await this.page.evaluate(() =>
+			window.__mautrixController.parseMessageList())
+		return this._filterMessages(chatID, messages)
 	}
 
 	async _processChatListChangeUnsafe(chatID) {
@@ -616,11 +644,6 @@ export default class MessagesPuppeteer {
 			this.log("No new messages found in", chatID)
 			return
 		}
-		const newFirstID = messages[0].id
-		const newLastID = messages[messages.length - 1].id
-		this.mostRecentMessages.set(chatID, newLastID)
-		const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
-		this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range}`)
 
 		if (this.client) {
 			for (const message of messages) {
@@ -652,14 +675,10 @@ export default class MessagesPuppeteer {
 
 	_receiveReceiptMulti(chat_id, receipts) {
 		this.log(`Received bulk read receipts for chat ${chat_id}:`, receipts)
-		this.taskQueue.push(() => this._receiveReceiptMulti(chat_id, receipts))
-			.catch(err => this.error("Error handling read receipt changes:", err))
-	}
-
-	async _receiveReceiptMultiUnsafe(chat_id, receipts) {
-		for (receipt of receipts) {
+		for (const receipt of receipts) {
 			receipt.chat_id = chat_id
-			await this.client.sendReceipt(receipt)
+			this.taskQueue.push(() => this.client.sendReceipt(receipt))
+				.catch(err => this.error("Error handling read receipt changes:", err))
 		}
 	}
 
