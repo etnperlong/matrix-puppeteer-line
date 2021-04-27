@@ -25,7 +25,7 @@ import { sleep } from "./util.js"
 export default class MessagesPuppeteer {
 	static profileDir = "./profiles"
 	static executablePath = undefined
-	static disableDebug = false
+	static devtools = false
 	static noSandbox = false
 	static viewport = { width: 960, height: 880 }
 	static url = undefined
@@ -65,17 +65,22 @@ export default class MessagesPuppeteer {
 	async start() {
 		this.log("Launching browser")
 
-		const extensionArgs = [
+		let extensionArgs = [
 			`--disable-extensions-except=${MessagesPuppeteer.extensionDir}`,
 			`--load-extension=${MessagesPuppeteer.extensionDir}`
 		]
+		if (MessagesPuppeteer.noSandbox) {
+			extensionArgs = extensionArgs.concat(`--no-sandbox`)
+		}
 
 		this.browser = await puppeteer.launch({
 			executablePath: MessagesPuppeteer.executablePath,
 			userDataDir: this.profilePath,
-			args: MessagesPuppeteer.noSandbox ? extensionArgs.concat("--no-sandbox") : extensionArgs,
+			args: extensionArgs,
 			headless: false, // Needed to load extensions
 			defaultViewport: MessagesPuppeteer.viewport,
+			devtools: MessagesPuppeteer.devtools,
+			timeout: 0,
 		})
 		this.log("Opening new tab")
 		const pages = await this.browser.pages()
@@ -337,8 +342,8 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[ChatListInfo]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
-		return await this.page.evaluate(
-			() => window.__mautrixController.parseChatList())
+		return await this.taskQueue.push(() =>
+			this.page.evaluate(() => window.__mautrixController.parseChatList()))
 	}
 
 	/**
@@ -368,21 +373,6 @@ export default class MessagesPuppeteer {
 		return { id: await this.taskQueue.push(() => this._sendMessageUnsafe(chatID, text)) }
 	}
 
-	_filterMessages(chatID, messages) {
-		const minID = this.mostRecentMessages.get(chatID) || 0
-		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
-
-		let range = 0
-		if (filtered_messages.length > 0) {
-			const newFirstID = filtered_messages[0].id
-			const newLastID = filtered_messages[filtered_messages.length - 1].id
-			this.mostRecentMessages.set(chatID, newLastID)
-			range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
-		}
-		this.log(`Loaded ${messages.length} messages in ${chatID}: got ${range} newer than ${minID}`)
-		return filtered_messages
-	}
-
 	/**
 	 * Get messages in a chat.
 	 *
@@ -390,7 +380,7 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
 	 */
 	async getMessages(chatID) {
-		return this.taskQueue.push(async () => {
+		return await this.taskQueue.push(async () => {
 			const messages = await this._getMessagesUnsafe(chatID)
 			if (messages.length > 0) {
 				for (const message of messages) {
@@ -418,41 +408,6 @@ export default class MessagesPuppeteer {
 
 	async sendFile(chatID, filePath) {
 		return { id: await this.taskQueue.push(() => this._sendFileUnsafe(chatID, filePath)) }
-	}
-
-	async _sendFileUnsafe(chatID, filePath) {
-		await this._switchChat(chatID)
-		const promise = this.page.evaluate(
-			() => window.__mautrixController.promiseOwnMessage(
-				10000, // Use longer timeout for file uploads
-				"#_chat_message_success_menu",
-				"#_chat_message_fail_menu"))
-
-		try {
-			this.log(`About to ask for file chooser in ${chatID}`)
-			const [fileChooser] = await Promise.all([
-				this.page.waitForFileChooser(),
-				this.page.click("#_chat_room_plus_btn")
-			])
-			this.log(`About to upload ${filePath}`)
-			await fileChooser.accept([filePath])
-		} catch (e) {
-			this.log(`Failed to upload file to ${chatID}`)
-			return -1
-		}
-
-		// TODO Commonize with text message sending
-		try {
-			this.log("Waiting for file to be sent")
-			const id = await promise
-			this.log(`Successfully sent file in message ${id} to ${chatID}`)
-			return id
-		} catch (e) {
-			this.error(`Error sending file to ${chatID}`)
-			// TODO Figure out why e is undefined...
-			//this.error(e)
-			return -1
-		}
 	}
 
 	async startObserving() {
@@ -521,7 +476,7 @@ export default class MessagesPuppeteer {
 	}
 
 	// TODO Commonize
-	async getParticipantList() {
+	async _getParticipantList() {
 		await this._showParticipantList()
 		return await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
 	}
@@ -532,9 +487,9 @@ export default class MessagesPuppeteer {
 		if (!participantList) {
 			this.log("Participant list hidden, so clicking chat header to show it")
 			await this.page.click("#_chat_header_area > .mdRGT04Link")
-			participantList = await this.page.waitForSelector(selector)
+			// Use no timeout since the browser itself is using this
+			await this.page.waitForSelector(selector, {timeout: 0})
 		}
-		//return participantList
 	}
 
 	async _getChatInfoUnsafe(chatID) {
@@ -561,7 +516,7 @@ export default class MessagesPuppeteer {
 			this.log("Found multi-user chat, so clicking chat header to get participants")
 			// TODO This will mark the chat as "read"!
 			await this._switchChat(chatID)
-			const participantList = await this.getParticipantList()
+			const participantList = await this._getParticipantList()
 			// TODO Is a group not actually created until a message is sent(?)
 			// 		If so, maybe don't create a portal until there is a message.
 			participants = await participantList.evaluate(
@@ -591,7 +546,7 @@ export default class MessagesPuppeteer {
 
 	async _sendMessageUnsafe(chatID, text) {
 		await this._switchChat(chatID)
-		const promise = this.page.evaluate(
+		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
 
 		const input = await this.page.$("#_chat_room_input")
@@ -599,14 +554,45 @@ export default class MessagesPuppeteer {
 		await input.type(text)
 		await input.press("Enter")
 
+		return await this._waitForSentMessage(chatID)
+	}
+
+	async _sendFileUnsafe(chatID, filePath) {
+		await this._switchChat(chatID)
+		await this.page.evaluate(
+			() => window.__mautrixController.promiseOwnMessage(
+				10000, // Use longer timeout for file uploads
+				"#_chat_message_success_menu",
+				"#_chat_message_fail_menu"))
+
+		try {
+			this.log(`About to ask for file chooser in ${chatID}`)
+			const [fileChooser] = await Promise.all([
+				this.page.waitForFileChooser(),
+				this.page.click("#_chat_room_plus_btn")
+			])
+			this.log(`About to upload ${filePath}`)
+			await fileChooser.accept([filePath])
+		} catch (e) {
+			this.log(`Failed to upload file to ${chatID}`)
+			return -1
+		}
+
+		return await this._waitForSentMessage(chatID)
+	}
+
+	async _waitForSentMessage(chatID) {
 		try {
 			this.log("Waiting for message to be sent")
-			const id = await promise
+			const id = await this.page.evaluate(
+				() => window.__mautrixController.waitForOwnMessage())
 			this.log(`Successfully sent message ${id} to ${chatID}`)
 			return id
 		} catch (e) {
 			// TODO Catch if something other than a timeout
 			this.error(`Timed out sending message to ${chatID}`)
+			// TODO Figure out why e is undefined...
+			//this.error(e)
 			return -1
 		}
 	}
@@ -634,6 +620,20 @@ export default class MessagesPuppeteer {
 		const messages = await this.page.evaluate(() =>
 			window.__mautrixController.parseMessageList())
 		return this._filterMessages(chatID, messages)
+	}
+
+	_filterMessages(chatID, messages) {
+		const minID = this.mostRecentMessages.get(chatID) || 0
+		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+
+		if (filtered_messages.length > 0) {
+			const newFirstID = filtered_messages[0].id
+			const newLastID = filtered_messages[filtered_messages.length - 1].id
+			this.mostRecentMessages.set(chatID, newLastID)
+			const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
+			this.log(`Loaded ${messages.length} messages in ${chatID}, got ${filtered_messages.length} newer than ${minID} (${range})`)
+		}
+		return filtered_messages
 	}
 
 	async _processChatListChangeUnsafe(chatID) {
@@ -669,16 +669,29 @@ export default class MessagesPuppeteer {
 
 	_receiveReceiptDirectLatest(chat_id, receipt_id) {
 		this.log(`Received read receipt ${receipt_id} for chat ${chat_id}`)
-		this.taskQueue.push(() => this.client.sendReceipt({chat_id: chat_id, id: receipt_id}))
-			.catch(err => this.error("Error handling read receipt changes:", err))
+		if (this.client) {
+			this.client.sendReceipt({chat_id: chat_id, id: receipt_id})
+				.catch(err => this.error("Error handling read receipt:", err))
+		} else {
+			this.log("No client connected, not sending receipts")
+		}
 	}
 
-	_receiveReceiptMulti(chat_id, receipts) {
+	async _receiveReceiptMulti(chat_id, receipts) {
+		// Use async to ensure that receipts are sent in order
 		this.log(`Received bulk read receipts for chat ${chat_id}:`, receipts)
-		for (const receipt of receipts) {
-			receipt.chat_id = chat_id
-			this.taskQueue.push(() => this.client.sendReceipt(receipt))
-				.catch(err => this.error("Error handling read receipt changes:", err))
+		if (this.client) {
+			this.client.sendReceipt()
+			for (const receipt of receipts) {
+				receipt.chat_id = chat_id
+				try {
+					await this.client.sendReceipt(receipt)
+				} catch(err) {
+					this.error("Error handling read receipt:", err)
+				}
+			}
+		} else {
+			this.log("No client connected, not sending receipts")
 		}
 	}
 
@@ -730,6 +743,7 @@ export default class MessagesPuppeteer {
 
 	async _receiveExpiry(button) {
 		this.log("Something expired, clicking OK button to continue")
-		await this.page.click(button)
+		this.page.click(button).catch(err =>
+			this.error("Failed to dismiss expiry dialog:", err))
 	}
 }

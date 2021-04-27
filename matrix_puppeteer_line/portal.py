@@ -273,9 +273,12 @@ class Portal(DBPortal, BasePortal):
             if evt.is_outgoing and evt.receipt_count:
                 await self._handle_receipt(event_id, evt.receipt_count)
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
-            await msg.insert()
-            await self._send_delivery_receipt(event_id)
-            self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
+            try:
+                await msg.insert()
+                await self._send_delivery_receipt(event_id)
+                self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
+            except UniqueViolationError as e:
+                self.log.debug(f"Failed to handle remote message {evt.id} -> {event_id}: {e}")
 
     async def handle_remote_receipt(self, receipt: Receipt) -> None:
         msg = await DBMessage.get_by_mid(receipt.id)

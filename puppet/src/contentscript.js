@@ -81,16 +81,20 @@ const ChatTypeEnum = Object.freeze({
 })
 
 class MautrixController {
-	constructor(ownID) {
+	constructor() {
 		this.chatListObserver = null
 		this.msgListObserver = null
 		this.receiptObserver = null
+
 		this.qrChangeObserver = null
 		this.qrAppearObserver = null
 		this.emailAppearObserver = null
 		this.pinAppearObserver = null
 		this.expiryObserver = null
 		this.ownID = null
+
+		this.ownMsgPromise = Promise.resolve(-1)
+		this._promiseOwnMsgReset()
 	}
 
 	setOwnID(ownID) {
@@ -253,14 +257,14 @@ class MautrixController {
 		) {
 			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
 			if (img) {
-				let resolve
+				let imgResolve
 				// TODO Should reject on "#_chat_message_image_failure"
-				let observer = new MutationObserver((changes) => {
+				let observer = new MutationObserver(changes => {
 					for (const change of changes) {
 						if (this._isLoadedImageURL(change.target.src) && observer) {
 							observer.disconnect()
 							observer = null
-							resolve(change.target.src)
+							imgResolve(change.target.src)
 							return
 						}
 					}
@@ -274,8 +278,8 @@ class MautrixController {
 					messageData.image_url = img.src
 					observer.disconnect()
 				} else {
-					messageData.image_url = await new Promise((realResolve, reject) => {
-						resolve = realResolve
+					messageData.image_url = await new Promise(resolve => {
+						imgResolve = resolve
 						setTimeout(() => {
 							if (observer) {
 								observer.disconnect()
@@ -302,95 +306,40 @@ class MautrixController {
 	}
 
 
+	/**
+	 * Create and store a promise that resolves when a message written
+	 * by the user finishes getting sent.
+	 * Accepts selectors for elements that become visible once the message
+	 * has succeeded or failed to be sent.
+	 *
+	 * @param {int} timeoutLimitMillis - The maximum amount of time to wait for the message to be sent.
+	 * @param {str} successSelector - The selector for the element that indicates the message was sent.
+	 * @param {str} failureSelector - The selector for the element that indicates the message failed to be sent.
+	 */
 	promiseOwnMessage(timeoutLimitMillis, successSelector, failureSelector=null) {
-		let observer
-		let msgID = -1
-		let resolve
-		let reject
+		this.promiseOwnMsgSuccessSelector = successSelector
+		this.promiseOwnMsgFailureSelector = failureSelector
 
-		const resolveMessage = () => {
-			observer.disconnect()
-			observer = null
-			window.__mautrixReceiveMessageID(msgID)
-			resolve(msgID)
-		}
-
-		const rejectMessage = failureElement => {
-			observer.disconnect()
-			observer = null
-			reject(failureElement)
-		}
-
-		const changeCallback = (changes) => {
-			for (const change of changes) {
-				for (const addedNode of change.addedNodes) {
-					if (addedNode.classList.contains("mdRGT07Own")) {
-						const successElement = addedNode.querySelector(successSelector)
-						if (successElement) {
-							console.log("Found success element")
-							console.log(successElement)
-							msgID = +addedNode.getAttribute("data-local-id")
-							if (successElement.classList.contains("MdNonDisp")) {
-								console.log("Invisible success, wait")
-								observer.disconnect()
-								observer = new MutationObserver(getVisibleCallback(true))
-								observer.observe(successElement, { attributes: true, attributeFilter: ["class"] })
-							} else {
-								console.log("Already visible success")
-								resolveMessage()
-							}
-							return
-						} else if (failureSelector) {
-							const failureElement = addedNode.querySelector(failureSelector)
-							if (failureElement) {
-								console.log("Found failure element")
-								console.log(failureElement)
-								if (failureElement.classList.contains("MdNonDisp")) {
-									console.log("Invisible failure, wait")
-									observer.disconnect()
-									observer = new MutationObserver(getVisibleCallback(false))
-									observer.observe(successElement, { attributes: true, attributeFilter: ["class"] })
-								} else {
-									console.log("Already visible failure")
-									rejectMessage(failureElement)
-								}
-								return
-							}
-						}
-					}
-				}
-			}
-		}
-
-		const getVisibleCallback = isSuccess => {
-			return changes => {
-				for (const change of changes) {
-					if (!change.target.classList.contains("MdNonDisp")) {
-						console.log(`Waited for visible ${isSuccess ? "success" : "failure"}`)
-						console.log(change.target)
-						isSuccess ? resolveMessage() : rejectMessage(change.target)
-						return
-					}
-				}
-			}
-		}
-
-		observer = new MutationObserver(changeCallback)
-		observer.observe(
-			document.querySelector("#_chat_room_msg_list"),
-			{ childList: true })
-
-		return new Promise((realResolve, realReject) => {
-			resolve = realResolve
-			reject = realReject
+		this.ownMsgPromise = new Promise((resolve, reject) => {
+			this.promiseOwnMsgResolve = resolve
+			this.promiseOwnMsgReject = reject
 			setTimeout(() => {
 				if (observer) {
 					console.log("Timeout!")
-					observer.disconnect()
+					this._promiseOwnMsgReset()
 					reject()
 				}
 			}, timeoutLimitMillis)
 		})
+	}
+
+	/**
+	 * Wait for a user-sent message to finish getting sent.
+	 *
+	 * @return {Promise<int>} - The ID of the sent message.
+	 */
+	async waitForOwnMessage() {
+		return await this.ownMsgPromise
 	}
 
 	async _tryParseMessages(msgList, chatType) {
@@ -403,6 +352,8 @@ class MautrixController {
 				// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
 				// 		but that is unlikely to be a problem here.
 				// 		Also, offscreen times may have .MdNonDisp on them
+				// TODO Explicitly look for the most recent date element,
+				//      as it might not have been one of the new items in msgList
 				const timeElement = child.querySelector("time")
 				if (timeElement) {
 					const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
@@ -604,14 +555,14 @@ class MautrixController {
 				}
 				*/
 			} else if (change.target.tagName == "LI") {
-				if (!change.target.classList.contains("ExSelected")) {
+				if (change.target.classList.contains("ExSelected")) {
 					console.log("Not using chat list mutation response for currently-active chat")
 					continue
 				}
 				for (const node of change.addedNodes) {
 					const chat = this.parseChatListItem(node)
 					if (chat) {
-						console.debug("Changed chat list item:", chat)
+						console.log("Changed chat list item:", chat)
 						changedChatIDs.add(chat.id)
 					} else {
 						console.debug("Could not parse node as a chat list item:", node)
@@ -633,7 +584,12 @@ class MautrixController {
 	 */
 	addChatListObserver() {
 		this.removeChatListObserver()
-		this.chatListObserver = new MutationObserver(mutations => {
+		this.chatListObserver = new MutationObserver(async (mutations) => {
+			// Wait for pending sent messages to be resolved before responding to mutations
+			try {
+				await this.ownMsgPromise
+			} catch (e) {}
+
 			try {
 				this._observeChatListMutations(mutations)
 			} catch (err) {
@@ -739,15 +695,31 @@ class MautrixController {
 		const chatID = this.getCurrentChatID()
 		const chatType = this.getChatType(chatID)
 
-		this.msgListObserver = new MutationObserver(async (changes) => {
+		let orderedPromises = [Promise.resolve()]
+		this.msgListObserver = new MutationObserver(changes => {
+			let msgList = []
 			for (const change of changes) {
-				const msgList = Array.from(change.addedNodes).filter(
-					child => child.tagName == "DIV" && child.hasAttribute("data-local-id"))
-				msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
-				window.__mautrixReceiveMessages(chatID, await this._tryParseMessages(msgList, chatType))
+				change.addedNodes.forEach(child => {
+					if (child.tagName == "DIV" && child.hasAttribute("data-local-id")) {
+						msgList.push(child)
+					}
+				})
+			}
+			if (msgList.length == 0) {
+				return
+			}
+			msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
+			if (!this._observeOwnMessage(msgList)) {
+				let prevPromise = orderedPromises.shift()
+				orderedPromises.push(new Promise(resolve => prevPromise
+					.then(() => this._tryParseMessages(msgList, chatType))
+					.then(msgs => window.__mautrixReceiveMessages(chatID, msgs))
+					.then(() => resolve())
+				))
 			}
 		})
-		this.msgListObserver.observe(chat_room_msg_list,
+		this.msgListObserver.observe(
+			chat_room_msg_list,
 			{ childList: true })
 
 		console.debug("Started msg list observer")
@@ -771,6 +743,106 @@ class MautrixController {
 			{ subtree: true, attributes: true, attributeFilter: ["class"] })
 
 		console.debug("Started receipt observer")
+	}
+
+	_observeOwnMessage(msgList) {
+		if (!this.promiseOwnMsgSuccessSelector && !this.promiseOwnMsgFailureSelector) {
+			// Not waiting for a pending sent message
+			return false
+		}
+		if (this.visibleSuccessObserver || this.visibleFailureObserver) {
+			// Already found a element that we're waiting on becoming visible
+			return true
+		}
+
+		for (const ownMsg of msgList.filter(msg => msg.classList.contains("mdRGT07Own"))) {
+			const successElement =
+				this.promiseOwnMsgSuccessSelector &&
+				ownMsg.querySelector(this.promiseOwnMsgSuccessSelector)
+			if (successElement) {
+				if (successElement.classList.contains("MdNonDisp")) {
+					console.log("Invisible success, wait")
+					console.log(successElement)
+					const msgID = +ownMsg.getAttribute("data-local-id")
+					this.visibleSuccessObserver = new MutationObserver(
+						this._getOwnVisibleCallback(msgID))
+					this.visibleSuccessObserver.observe(
+						successElement,
+						{ attributes: true, attributeFilter: ["class"] })
+				} else {
+					console.debug("Already visible success, must not be it")
+					console.debug(successElement)
+				}
+			}
+
+			const failureElement =
+				this.promiseOwnMsgFailureSelector &&
+				ownMsg.querySelector(this.promiseOwnMsgFailureSelector)
+			if (failureElement) {
+				if (failureElement.classList.contains("MdNonDisp")) {
+					console.log("Invisible failure, wait")
+					console.log(failureElement)
+					this.visibleFailureObserver = new MutationObserver(
+						this._getOwnVisibleCallback())
+					this.visibleFailureObserver.observe(
+						failureElement,
+						{ attributes: true, attributeFilter: ["class"] })
+				} else {
+					console.debug("Already visible failure, must not be it")
+					console.log(failureElement)
+				}
+			}
+
+			if (this.visibleSuccessObserver || this.visibleFailureObserver) {
+				return true
+			}
+		}
+		return false
+	}
+
+	_getOwnVisibleCallback(msgID=null) {
+		const isSuccess = !!msgID
+		return changes => {
+			for (const change of changes) {
+				if (!change.target.classList.contains("MdNonDisp")) {
+					console.log(`Waited for visible ${isSuccess ? "success" : "failure"}`)
+					console.log(change.target)
+					isSuccess ? this._resolveOwnMessage(msgID) : this._rejectOwnMessage(change.target)
+					return
+				}
+			}
+		}
+	}
+
+	_resolveOwnMessage(msgID) {
+		const resolve = this.promiseOwnMsgResolve
+		this._promiseOwnMsgReset()
+
+		window.__mautrixReceiveMessageID(msgID).then(
+			() => resolve(msgID))
+	}
+
+	_rejectOwnMessage(failureElement) {
+		const reject = this.promiseOwnMsgReject
+		this._promiseOwnMsgReset()
+
+		reject(failureElement)
+	}
+
+	_promiseOwnMsgReset() {
+		this.promiseOwnMsgSuccessSelector = null
+		this.promiseOwnMsgFailureSelector = null
+		this.promiseOwnMsgResolve = null
+		this.promiseOwnMsgReject = null
+
+		if (this.visibleSuccessObserver) {
+			this.visibleSuccessObserver.disconnect()
+		}
+		this.visibleSuccessObserver = null
+		if (this.visibleFailureObserver) {
+			this.visibleFailureObserver.disconnect()
+		}
+		this.visibleFailureObserver = null
 	}
 
 	removeMsgListObserver() {

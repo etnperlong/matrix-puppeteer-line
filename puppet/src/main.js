@@ -36,7 +36,7 @@ MessagesPuppeteer.noSandbox = args["--no-sandbox"]
 console.log("[Main] Reading config from", configPath)
 const config = JSON.parse(fs.readFileSync(configPath).toString())
 MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
-MessagesPuppeteer.disableDebug = !!config.disable_debug
+MessagesPuppeteer.devtools = config.devtools || false
 MessagesPuppeteer.url = config.url
 MessagesPuppeteer.extensionDir = config.extension_dir || MessagesPuppeteer.extensionDir
 
