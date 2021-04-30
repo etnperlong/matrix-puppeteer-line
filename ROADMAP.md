@@ -6,6 +6,7 @@
     * [x] Images
     * [ ] Files
     * [x] Stickers
+  * [x] Notification for message send failure
   * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
   * [ ] Room metadata changes
     * [ ] Name
@@ -20,11 +21,13 @@
     * [ ] Videos
     * [x] Stickers
     * [x] Sticons
-        * [x] Single
-        * [x] Multiple or mixed with text
+      * [x] Single
+      * [x] Multiple or mixed with text
     * [x] EmojiOne
-  * [x] Notification for message send failure
+  * [ ] Message unsend
   * [ ] Read receipts
+    * [x] For most recently active chat
+    * [ ] For any chat
   * [x] User metadata
     * [ ] Name
       * [x] On initial sync
@@ -62,6 +65,7 @@
   * [x] E2EE in Matrix rooms
   * [ ] No display required for Puppeteer-controlled browser
   * [ ] Multiple bridge users
+  * [ ] Relay bridging
 
 ## Missing features
 ### Missing from LINE
