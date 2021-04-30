@@ -36,18 +36,9 @@ class ReceiptReaction:
         q = "INSERT INTO receipt_reaction (mxid, mx_room, relates_to, num_read) VALUES ($1, $2, $3, $4)"
         await self.db.execute(q, self.mxid, self.mx_room, self.relates_to, self.num_read)
 
-    async def update(self) -> None:
-        q = ("UPDATE receipt_reaction SET relates_to=$3, num_read=$4 "
-             "WHERE mxid=$1 AND mx_room=$2")
-        await self.db.execute(q, self.mxid, self.mx_room, self.relates_to, self.num_read)
-
     async def delete(self) -> None:
         q = "DELETE FROM receipt_reaction WHERE mxid=$1 AND mx_room=$2"
         await self.db.execute(q, self.mxid, self.mx_room)
-
-    @classmethod
-    async def delete_all(cls, room_id: RoomID) -> None:
-        await cls.db.execute("DELETE FROM message WHERE mx_room=$1", room_id)
 
     @classmethod
     async def get_by_mxid(cls, mxid: EventID, mx_room: RoomID) -> Optional['ReceiptReaction']:
