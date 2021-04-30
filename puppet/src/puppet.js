@@ -681,7 +681,6 @@ export default class MessagesPuppeteer {
 		// Use async to ensure that receipts are sent in order
 		this.log(`Received bulk read receipts for chat ${chat_id}:`, receipts)
 		if (this.client) {
-			this.client.sendReceipt()
 			for (const receipt of receipts) {
 				receipt.chat_id = chat_id
 				try {

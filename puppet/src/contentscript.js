@@ -72,7 +72,7 @@ window.__mautrixReceiveMessageID = function(id) {}
 /**
  * @return {Promise<Element>}
  */
-window.__mautrixGetParticipantsList = function() {}
+window.__mautrixShowParticipantsList = function() {}
 
 const ChatTypeEnum = Object.freeze({
 	DIRECT: 1,
@@ -615,10 +615,10 @@ class MautrixController {
 
 	/**
 	 * @param {[MutationRecord]} mutations - The mutation records that occurred
-	 * @param {str} chat_id - The ID of the chat being observed.
+	 * @param {str} chatID - The ID of the chat being observed.
 	 * @private
 	 */
-	_observeReceiptsDirect(mutations, chat_id) {
+	_observeReceiptsDirect(mutations, chatID) {
 		let receipt_id
 		for (const change of mutations) {
 			if ( change.target.classList.contains("mdRGT07Read") &&
@@ -634,7 +634,7 @@ class MautrixController {
 		}
 
 		if (receipt_id) {
-			window.__mautrixReceiveReceiptDirectLatest(chat_id, receipt_id).then(
+			window.__mautrixReceiveReceiptDirectLatest(chatID, receipt_id).then(
 				() => console.debug(`Receipt sent for message ${receipt_id}`),
 				err => console.error(`Error sending receipt for message ${receipt_id}:`, err))
 		}
@@ -642,23 +642,17 @@ class MautrixController {
 
 	/**
 	 * @param {[MutationRecord]} mutations - The mutation records that occurred
-	 * @param {str} chat_id - The ID of the chat being observed.
+	 * @param {str} chatID - The ID of the chat being observed.
 	 * @private
 	 */
-	_observeReceiptsMulti(mutations, chat_id) {
+	_observeReceiptsMulti(mutations, chatID) {
 		const ids = new Set()
 		const receipts = []
 		for (const change of mutations) {
-			let success = false
-			if (change.type == "attributes") {
-				if ( change.target.classList.contains("mdRGT07Read") &&
-					!change.target.classList.contains("MdNonDisp")) {
-					success = true
-				}
-			} else if (change.type == "characterData") {
-				success = true
-			}
-			if (success) {
+			const target = change.type == "characterData" ? change.target.parentElement : change.target
+			if ( change.target.classList.contains("mdRGT07Read") &&
+				!change.target.classList.contains("MdNonDisp"))
+			{
 				const msgElement = change.target.closest(".mdRGT07Own")
 				if (msgElement) {
 					const id = +msgElement.getAttribute("data-local-id")
@@ -674,7 +668,7 @@ class MautrixController {
 		}
 
 		if (receipts.length > 0) {
-			window.__mautrixReceiveReceiptMulti(chat_id, receipts).then(
+			window.__mautrixReceiveReceiptMulti(chatID, receipts).then(
 				() => console.debug(`Receipts sent for ${receipts.length} messages`),
 				err => console.error(`Error sending receipts for ${receipts.length} messages`, err))
 		}
@@ -739,8 +733,13 @@ class MautrixController {
 			}
 		})
 		this.receiptObserver.observe(
-			chat_room_msg_list,
-			{ subtree: true, attributes: true, attributeFilter: ["class"] })
+			chat_room_msg_list, {
+				subtree: true,
+				attributes: true,
+				attributeFilter: ["class"],
+				// TODO Consider using the same observer to watch for "ⓘ Decrypting..."
+				characterData: chatType != ChatTypeEnum.DIRECT,
+			})
 
 		console.debug("Started receipt observer")
 	}
