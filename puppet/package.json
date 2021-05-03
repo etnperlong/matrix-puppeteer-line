@@ -6,6 +6,9 @@
     "type": "git",
     "url": "git+https://src.miscworks.net/fair/matrix-puppeteer-line.git"
   },
+  "engines": {
+    "node": ">=10.18.1"
+  },
   "type": "module",
   "main": "src/main.js",
   "author": "Andrew Ferrazzutti <fair@miscworks.net>",
