@@ -147,7 +147,14 @@ class RPCClient:
 
     async def _read_loop(self) -> None:
         while self._reader is not None and not self._reader.at_eof():
-            line = await self._reader.readline()
+            line = b''
+            while True:
+                try:
+                    line += await self._reader.readuntil()
+                    break
+                except asyncio.exceptions.LimitOverrunError as e:
+                    self.log.warning(f"Buffer overrun: {e}")
+                    line += await self._reader.read(self._reader._limit)
             if not line:
                 continue
             try:
