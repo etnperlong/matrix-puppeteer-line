@@ -64,6 +64,10 @@ class User(DBUser, BaseUser):
         cls.loop = bridge.loop
         Client.config = bridge.config
 
+    async def send_notice(self, text) -> None:
+        if self.notice_room:
+            await self.az.intent.send_notice(self.notice_room, text)
+
     async def is_logged_in(self) -> bool:
         try:
             return self.client and (await self.client.start()).is_logged_in
@@ -92,13 +96,17 @@ class User(DBUser, BaseUser):
         self.loop.create_task(self.connect_double_puppet())
         self.client = Client(self.mxid)
         self.log.debug("Starting client")
+        await self.send_notice("Starting up...")
         state = await self.client.start()
         await self.client.on_message(self.handle_message)
         await self.client.on_receipt(self.handle_receipt)
         if state.is_connected:
             self._track_metric(METRIC_CONNECTED, True)
         if state.is_logged_in:
+            await self.send_notice("Already logged in to LINE")
             self.loop.create_task(self._try_sync())
+        else:
+            await self.send_notice("Ready to log in to LINE")
 
     async def _try_sync(self) -> None:
         try:
@@ -117,6 +125,7 @@ class User(DBUser, BaseUser):
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.set_last_message_ids(await DBMessage.get_max_mids())
         self.log.info("Syncing chats")
+        await self.send_notice("Synchronizing chats...")
         await self.client.pause()
         chats = await self.client.get_chats()
         limit = self.config["bridge.initial_conversation_sync"]
@@ -129,8 +138,10 @@ class User(DBUser, BaseUser):
                 else:
                     await portal.create_matrix_room(self, chat)
         await self.client.resume()
+        await self.send_notice("Synchronization complete")
 
     async def stop(self) -> None:
+        # TODO Notices for shutdown messages
         if self._connection_check_task:
             self._connection_check_task.cancel()
             self._connection_check_task = None

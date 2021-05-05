@@ -44,4 +44,3 @@ async def ping(evt: CommandEvent) -> None:
                  help_text="Synchronize portals")
 async def sync(evt: CommandEvent) -> None:
     await evt.sender.sync()
-    await evt.reply("Synchronization complete")
