@@ -175,7 +175,7 @@ class Portal(DBPortal, BasePortal):
     async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
                                      invite: bool = True) -> Optional[IntentAPI]:
         # Use bridge bot as puppet for own user when puppet for own user is unavailable
-        # TODO Use own LINE puppet instead, if it's available
+        # TODO Use own LINE puppet instead, and create it if it's not available yet
         intent = sender.intent if sender else self.az.intent
         if self.is_direct and (sender is None or sender.mid == source.mid and not sender.is_real_user):
             if self.invite_own_puppet_to_pm and invite:
@@ -509,8 +509,8 @@ class Portal(DBPortal, BasePortal):
     async def _update_matrix_room(self, source: 'u.User', info: ChatInfo) -> None:
         await self.main_intent.invite_user(self.mxid, source.mxid, check_cache=True)
         puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
-        if puppet:
-            await puppet.az.intent.ensure_joined(self.mxid)
+        if puppet and puppet.intent:
+            await puppet.intent.ensure_joined(self.mxid)
 
         await self.update_info(info, source.client)
         await self.backfill(source)
@@ -540,8 +540,6 @@ class Portal(DBPortal, BasePortal):
                 "type": str(EventType.ROOM_ENCRYPTION),
                 "content": {"algorithm": "m.megolm.v1.aes-sha2"},
             })
-            if self.is_direct:
-                invites.append(self.az.bot_mxid)
         # NOTE Set the room title even for direct chats, because
         #      the LINE bot itself may appear in the title otherwise.
         #if self.encrypted or not self.is_direct:
@@ -590,22 +588,13 @@ class Portal(DBPortal, BasePortal):
             await self.update()
             self.log.debug(f"Matrix room created: {self.mxid}")
             self.by_mxid[self.mxid] = self
+            await self.backfill(source)
             if not self.is_direct:
                 # For multi-user chats, backfill before updating participants,
                 # to act as as a best guess of when users actually joined.
                 # No way to tell when a user actually left, so just check the
                 # participants list after backfilling.
-                await self.backfill(source)
                 await self._update_participants(info.participants)
-            else:
-                puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
-                if puppet:
-                    try:
-                        await puppet.az.intent.join_room_by_id(self.mxid)
-                    except MatrixError:
-                        self.log.debug("Failed to join custom puppet into newly created portal",
-                                       exc_info=True)
-                await self.backfill(source)
 
         return self.mxid
 

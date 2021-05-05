@@ -150,7 +150,6 @@ class Puppet(DBPuppet, BasePuppet):
 
     @classmethod
     async def get_by_custom_mxid(cls, mxid: UserID) -> Optional['u.User']:
-        # TODO double-puppeting
-        #if mxid == cls.config["bridge.user"]:
-        #    return await cls.bridge.get_user(mxid)
+        if mxid == cls.config["bridge.user"]:
+            return await cls.bridge.get_user(mxid)
         return None
