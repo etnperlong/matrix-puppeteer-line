@@ -35,6 +35,7 @@ from mautrix.util.simple_lock import SimpleLock
 from .db import Portal as DBPortal, Message as DBMessage, ReceiptReaction as DBReceiptReaction, Media as DBMedia
 from .config import Config
 from .rpc import ChatInfo, Participant, Message, Receipt, Client, PathImage
+from .rpc.types import RPCError
 from . import user as u, puppet as p, matrix as m
 
 if TYPE_CHECKING:
@@ -129,7 +130,11 @@ class Portal(DBPortal, BasePortal):
         if message.msgtype.is_text:
             if message.msgtype == MessageType.EMOTE:
                 text = f"/me {text}"
-            message_id = await sender.client.send(self.chat_id, text)
+            try:
+                message_id = await sender.client.send(self.chat_id, text)
+            except RPCError as e:
+                self.log.warning(f"Failed to send message {event_id} to chat {self.chat_id}: {e}")
+                message_id = -1
         elif message.msgtype.is_media:
             if message.file and decrypt_attachment:
                 data = await self.main_intent.download_media(message.file.url)
@@ -143,7 +148,11 @@ class Portal(DBPortal, BasePortal):
             file_path = f"/dev/shm/file_{randint(0,1000)}{mimetypes.guess_extension(mime_type)}"
             temp_file = open(file_path, 'wb')
             temp_file.write(data)
-            message_id = await sender.client.send_file(self.chat_id, file_path)
+            try:
+                message_id = await sender.client.send_file(self.chat_id, file_path)
+            except RPCError as e:
+                self.log.warning(f"Failed to upload media {event_id} to chat {self.chat_id}: {e}")
+                message_id = -1
             remove(file_path)
         msg = None
         if message_id != -1:
@@ -159,7 +168,6 @@ class Portal(DBPortal, BasePortal):
                 self.mxid,
                "Posting this message to LINE may have failed.",
                relates_to=RelatesTo(rel_type=RelationType.REPLY, event_id=event_id))
-            self.log.warning(f"Handled Matrix message {event_id} -> {message_id}")
 
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
@@ -215,6 +223,10 @@ class Portal(DBPortal, BasePortal):
         if evt.image_url:
             # TODO Deduplicate stickers, but only if encryption is disabled
             content = await self._handle_remote_photo(source, intent, evt)
+            if not content:
+                content = TextMessageEventContent(
+                    msgtype=MessageType.NOTICE,
+                    body="<unbridgeable media>")
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         elif evt.html and not evt.html.isspace():
             chunks = []
@@ -305,7 +317,11 @@ class Portal(DBPortal, BasePortal):
 
     async def _handle_remote_photo(self, source: 'u.User', intent: IntentAPI, message: Message
                                    ) -> Optional[MediaMessageEventContent]:
-        resp = await source.client.read_image(message.image_url)
+        try:
+            resp = await source.client.read_image(message.image_url)
+        except (RPCError, TypeError) as e:
+            self.log.warning(f"Failed to download remote photo from chat {self.chat_id}: {e}")
+            return None
         media_info = await self._reupload_remote_media(resp.data, intent, resp.mime)
         return MediaMessageEventContent(url=media_info.mxc, file=media_info.decryption_info,
                                         msgtype=MessageType.IMAGE, body=media_info.file_name,
