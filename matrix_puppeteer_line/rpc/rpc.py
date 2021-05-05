@@ -152,6 +152,9 @@ class RPCClient:
                 try:
                     line += await self._reader.readuntil()
                     break
+                except asyncio.exceptions.IncompleteReadError as e:
+                    line += e.partial
+                    break
                 except asyncio.exceptions.LimitOverrunError as e:
                     self.log.warning(f"Buffer overrun: {e}")
                     line += await self._reader.read(self._reader._limit)
