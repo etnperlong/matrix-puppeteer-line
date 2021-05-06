@@ -29,7 +29,7 @@ from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, Mess
                            TextMessageEventContent, MediaMessageEventContent, Membership, Format,
                            ContentURI, EncryptedFile, ImageInfo,
                            RelatesTo, RelationType)
-from mautrix.errors import MatrixError
+from mautrix.errors import IntentError, MatrixError
 from mautrix.util.simple_lock import SimpleLock
 
 from .db import Portal as DBPortal, Message as DBMessage, ReceiptReaction as DBReceiptReaction, Media as DBMedia
@@ -92,6 +92,12 @@ class Portal(DBPortal, BasePortal):
         return self.chat_id[0] == "r"
 
     @property
+    def needs_bridgebot(self) -> bool:
+        # TODO Ask Tulir why e2b needs the bridgebot to be in the room
+        # Reminder that the bridgebot's intent is used for non-DM rooms
+        return not self.is_direct or (self.encrypted and self.matrix.e2ee)
+
+    @property
     def main_intent(self) -> IntentAPI:
         if not self._main_intent:
             raise ValueError("Portal must be postinit()ed before main_intent can be used")
@@ -110,6 +116,7 @@ class Portal(DBPortal, BasePortal):
         NotificationDisabler.config_enabled = cls.config["bridge.backfill.disable_notifications"]
 
     async def _send_delivery_receipt(self, event_id: EventID) -> None:
+        # TODO Also send receipt from own puppet, if it's in the room
         if event_id and self.config["bridge.delivery_receipts"]:
             try:
                 await self.az.intent.mark_read(self.mxid, event_id)
@@ -187,7 +194,15 @@ class Portal(DBPortal, BasePortal):
         intent = sender.intent if sender else self.az.intent
         if self.is_direct and (sender is None or sender.mid == source.mid and not sender.is_real_user):
             if self.invite_own_puppet_to_pm and invite:
-                await self.main_intent.invite_user(self.mxid, intent.mxid)
+                try:
+                    await intent.ensure_joined(self.mxid)
+                except IntentError as e:
+                    if self.main_intent != self.az.intent:
+                        await self.main_intent.invite_user(self.mxid, intent.mxid)
+                        await intent.ensure_joined(self.mxid)
+                    else:
+                        self.log.warning(f"Unable to invite own puppet to {self.mxid}: {e}")
+                        intent = None
             elif await self.az.state_store.get_membership(self.mxid,
                                                           intent.mxid) != Membership.JOIN:
                 self.log.warning(f"Ignoring own {mid} in private chat because own puppet is not in"
@@ -427,9 +442,16 @@ class Portal(DBPortal, BasePortal):
             return
         self._last_participant_update = current_members
 
+        # TODO When supporting multiple bridge users, do this per user
+        forbid_own_puppets = \
+            not self.invite_own_puppet_to_pm or \
+            (await u.User.get_by_mxid(self.config["bridge.user"], False)).intent is not None
+
         # Make sure puppets who should be here are here
         for participant in participants:
             puppet = await p.Puppet.get_by_mid(participant.id)
+            if forbid_own_puppets and p.Puppet.is_mid_for_own_puppet(participant.id):
+                continue
             await puppet.intent.ensure_joined(self.mxid)
 
         print(current_members)
@@ -437,12 +459,18 @@ class Portal(DBPortal, BasePortal):
         # Kick puppets who shouldn't be here
         for user_id in await self.main_intent.get_room_members(self.mxid):
             if user_id == self.az.bot_mxid:
+                if forbid_own_puppets and not self.needs_bridgebot:
+                    await self.az.intent.leave_room(self.mxid)
                 continue
+
             mid = p.Puppet.get_id_from_mxid(user_id)
             if mid and mid not in current_members:
                 print(mid)
                 await self.main_intent.kick_user(self.mxid, user_id,
                                                  reason="User had left this chat")
+            elif forbid_own_puppets and p.Puppet.is_mid_for_own_puppet(mid):
+                await self.main_intent.kick_user(self.mxid, user_id,
+                                                 reason="Kicking own puppet")
 
     async def backfill(self, source: 'u.User') -> None:
         try:
@@ -594,7 +622,7 @@ class Portal(DBPortal, BasePortal):
             if not self.mxid:
                 raise Exception("Failed to create room: no mxid returned")
 
-            if self.encrypted and self.matrix.e2ee and self.is_direct:
+            if self.needs_bridgebot:
                 try:
                     await self.az.intent.ensure_joined(self.mxid)
                 except Exception:

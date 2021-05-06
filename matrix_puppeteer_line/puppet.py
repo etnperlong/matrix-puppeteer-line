@@ -148,6 +148,11 @@ class Puppet(DBPuppet, BasePuppet):
 
         return None
 
+    # TODO When supporting multiple bridge users, this should return the user whose puppet this is
+    @classmethod
+    def is_mid_for_own_puppet(cls, mid) -> bool:
+        return mid.startswith("_OWN_") if mid else False
+
     @classmethod
     async def get_by_custom_mxid(cls, mxid: UserID) -> Optional['u.User']:
         if mxid == cls.config["bridge.user"]:

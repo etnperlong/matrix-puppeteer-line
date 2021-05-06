@@ -79,7 +79,8 @@ bridge:
     # Set 0 to disable automatic syncing.
     initial_conversation_sync: 10
     # Whether or not the LINE users of logged in Matrix users should be
-    # invited to private chats when the user sends a message from another client.
+    # invited to rooms when the user sends a message from another client.
+    # NOTE: This setting is forced to "false" when custom puppets are enabled.
     invite_own_puppet_to_pm: false
     # Shared secret for https://github.com/devture/matrix-synapse-shared-secret-auth
     #
