@@ -324,10 +324,9 @@ class MautrixController {
 			this.promiseOwnMsgResolve = resolve
 			this.promiseOwnMsgReject = reject
 			setTimeout(() => {
-				if (observer) {
+				if (this.promiseOwnMsgReject) {
 					console.log("Timeout!")
-					this._promiseOwnMsgReset()
-					reject()
+					this._rejectOwnMessage()
 				}
 			}, timeoutLimitMillis)
 		})
@@ -745,33 +744,29 @@ class MautrixController {
 	}
 
 	_observeOwnMessage(msgList) {
-		if (!this.promiseOwnMsgSuccessSelector && !this.promiseOwnMsgFailureSelector) {
+		if (!this.promiseOwnMsgSuccessSelector) {
 			// Not waiting for a pending sent message
 			return false
 		}
-		if (this.visibleSuccessObserver || this.visibleFailureObserver) {
+		if (this.visibleSuccessObserver) {
 			// Already found a element that we're waiting on becoming visible
 			return true
 		}
 
 		for (const ownMsg of msgList.filter(msg => msg.classList.contains("mdRGT07Own"))) {
 			const successElement =
-				this.promiseOwnMsgSuccessSelector &&
 				ownMsg.querySelector(this.promiseOwnMsgSuccessSelector)
 			if (successElement) {
 				if (successElement.classList.contains("MdNonDisp")) {
-					console.log("Invisible success, wait")
+					console.log("Invisible success")
 					console.log(successElement)
-					const msgID = +ownMsg.getAttribute("data-local-id")
-					this.visibleSuccessObserver = new MutationObserver(
-						this._getOwnVisibleCallback(msgID))
-					this.visibleSuccessObserver.observe(
-						successElement,
-						{ attributes: true, attributeFilter: ["class"] })
 				} else {
 					console.debug("Already visible success, must not be it")
 					console.debug(successElement)
+					continue
 				}
+			} else {
+				continue
 			}
 
 			const failureElement =
@@ -779,22 +774,34 @@ class MautrixController {
 				ownMsg.querySelector(this.promiseOwnMsgFailureSelector)
 			if (failureElement) {
 				if (failureElement.classList.contains("MdNonDisp")) {
-					console.log("Invisible failure, wait")
+					console.log("Invisible failure")
 					console.log(failureElement)
-					this.visibleFailureObserver = new MutationObserver(
-						this._getOwnVisibleCallback())
-					this.visibleFailureObserver.observe(
-						failureElement,
-						{ attributes: true, attributeFilter: ["class"] })
 				} else {
 					console.debug("Already visible failure, must not be it")
 					console.log(failureElement)
+					continue
 				}
+			} else if (this.promiseOwnMsgFailureSelector) {
+				continue
 			}
 
-			if (this.visibleSuccessObserver || this.visibleFailureObserver) {
-				return true
+			console.log("Found invisible element, wait")
+			const msgID = +ownMsg.getAttribute("data-local-id")
+			this.visibleSuccessObserver = new MutationObserver(
+				this._getOwnVisibleCallback(msgID))
+			this.visibleSuccessObserver.observe(
+				successElement,
+				{ attributes: true, attributeFilter: ["class"] })
+
+			if (this.promiseOwnMsgFailureSelector) {
+				this.visibleFailureObserver = new MutationObserver(
+					this._getOwnVisibleCallback())
+				this.visibleFailureObserver.observe(
+					failureElement,
+					{ attributes: true, attributeFilter: ["class"] })
 			}
+
+			return true
 		}
 		return false
 	}
@@ -814,6 +821,7 @@ class MautrixController {
 	}
 
 	_resolveOwnMessage(msgID) {
+		if (!this.promiseOwnMsgResolve) return
 		const resolve = this.promiseOwnMsgResolve
 		this._promiseOwnMsgReset()
 
@@ -821,7 +829,8 @@ class MautrixController {
 			() => resolve(msgID))
 	}
 
-	_rejectOwnMessage(failureElement) {
+	_rejectOwnMessage(failureElement = null) {
+		if (!this.promiseOwnMsgReject) return
 		const reject = this.promiseOwnMsgReject
 		this._promiseOwnMsgReset()
 
