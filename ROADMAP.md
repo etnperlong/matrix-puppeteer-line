@@ -63,7 +63,6 @@
   * [x] Use bridge bot for messages sent from LINE app (when double-puppeting is disabled and `bridge.invite_own_puppet_to_pm` is enabled)
   * [x] Use own Matrix account for messages sent from LINE app (when double-puppeting is enabled)
   * [x] E2EE in Matrix rooms
-  * [ ] No display required for Puppeteer-controlled browser
   * [ ] Multiple bridge users
   * [ ] Relay bridging
 
