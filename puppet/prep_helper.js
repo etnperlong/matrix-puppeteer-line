@@ -8,6 +8,7 @@ import puppeteer from "puppeteer"
         args: [
             `--disable-extensions-except=${pathToExtension}`,
             `--load-extension=${pathToExtension}`
-        ]
+        ],
+		timeout: 0,
     })
 })()
