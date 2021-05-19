@@ -1,0 +1,11 @@
+[Unit]
+Description=Matrix-puppeteer-line Chrome backend
+PartOf=matrix-puppeteer-line-chrome.target
+
+[Service]
+; User=matrix
+WorkingDirectory=/opt/synapse/bridges/matrix-puppeteer-line/puppet
+ExecStart=/bin/xvfb-run /usr/bin/node src/main.js
+
+[Install]
+WantedBy=multi-user.target
