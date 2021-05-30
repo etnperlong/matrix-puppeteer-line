@@ -98,6 +98,12 @@ class Client(RPCClient):
 
         self.add_event_handler("receipt", wrapper)
 
+    async def on_logged_out(self, func: Callable[[], Awaitable[None]]) -> None:
+        async def wrapper(data: Dict[str, Any]) -> None:
+            await func()
+
+        self.add_event_handler("logged_out", wrapper)
+
     # TODO Type hint for sender
     async def login(self, sender, **login_data) -> AsyncGenerator[Tuple[str, str], None]:
         login_data["login_type"] = sender.command_status["login_type"]

@@ -101,6 +101,7 @@ class User(DBUser, BaseUser):
         state = await self.client.start()
         await self.client.on_message(self.handle_message)
         await self.client.on_receipt(self.handle_receipt)
+        await self.client.on_logged_out(self.handle_logged_out)
         if state.is_connected:
             self._track_metric(METRIC_CONNECTED, True)
         if state.is_logged_in:
@@ -175,6 +176,12 @@ class User(DBUser, BaseUser):
             chat_info = await self.client.get_chat(receipt.chat_id)
             await portal.create_matrix_room(self, chat_info)
         await portal.handle_remote_receipt(receipt)
+
+    async def handle_logged_out(self) -> None:
+        await self.send_bridge_notice("Logged out of LINE. Please run the \"login\" command to log back in.")
+        if self._connection_check_task:
+            self._connection_check_task.cancel()
+            self._connection_check_task = None
 
     def _add_to_cache(self) -> None:
         self.by_mxid[self.mxid] = self

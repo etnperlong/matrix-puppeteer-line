@@ -107,6 +107,8 @@ export default class MessagesPuppeteer {
 			this._receiveReceiptDirectLatest.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveReceiptMulti",
 			this._receiveReceiptMulti.bind(this))
+		await this.page.exposeFunction("__mautrixLoggedOut",
+			this._onLoggedOut.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
 		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
@@ -302,7 +304,17 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<boolean>} - Whether or not the session is logged in.
 	 */
 	async isLoggedIn() {
-		return await this.page.$("#wrap_message_sync") !== null
+		const selectors = [
+			"#mainApp:not(.MdNonDisp)",
+			"#wrap_message_sync",
+			"#_chat_list_body",
+		]
+		for (const selector of selectors) {
+			if (await this.page.$(selector) == null) {
+				return false
+			}
+		}
+		return true
 	}
 
 	async isPermanentlyDisconnected() {
@@ -750,6 +762,17 @@ export default class MessagesPuppeteer {
 				this.error("Failed to send failure reason to client:", err))
 		} else {
 			this.log("No client connected, not sending failure reason")
+		}
+	}
+
+	_onLoggedOut() {
+		this.log("Got logged out!")
+		this.stopObserving()
+		if (this.client) {
+			this.client.sendLoggedOut().catch(err =>
+				this.error("Failed to send logout notice to client:", err))
+		} else {
+			this.log("No client connected, not sending logout notice")
 		}
 	}
 }

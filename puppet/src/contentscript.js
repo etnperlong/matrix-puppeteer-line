@@ -69,6 +69,10 @@ window.__mautrixExpiry = function (button) {}
  * @return {Promise<void>}
  */
 window.__mautrixReceiveMessageID = function(id) {}
+/**
+ * @return {void}
+ */
+window.__mautrixLoggedOut = function() {}
 
 /**
  * typedef ChatTypeEnum
@@ -1286,4 +1290,17 @@ new MutationObserver(() => {
 	attributes: true,
 	attributeFilter: ["class"],
 	childList: true,
+})
+
+/**
+ * Watch for being logged out.
+ */
+const mainApp = document.querySelector("#mainApp")
+new MutationObserver(() => {
+	if (mainApp.classList.contains("MdNonDisp")) {
+		window.__mautrixLoggedOut()
+	}
+}).observe(mainApp, {
+	attributes: true,
+	attributeFilter: ["class"],
 })

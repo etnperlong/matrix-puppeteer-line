@@ -144,6 +144,14 @@ export default class Client {
 		})
 	}
 
+	sendLoggedOut() {
+		this.log("Sending logout notice to client")
+		return this._write({
+			id: --this.notificationID,
+			command: "logged_out",
+		})
+	}
+
 	handleStart = async (req) => {
 		let started = false
 		if (this.puppet === null) {
