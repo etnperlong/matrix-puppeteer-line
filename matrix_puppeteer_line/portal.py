@@ -447,18 +447,33 @@ class Portal(DBPortal, BasePortal):
         return False
 
     async def _update_icon(self, icon: Optional[PathImage], client: Client) -> bool:
-        icon_path = icon.path if icon else None
+        if icon:
+            if icon.url and not icon.path:
+                self.log.warn(f"Using URL as path for room icon of {self.name}")
+                icon_path = icon_url = icon.url
+            else:
+                icon_path = icon.path
+                icon_url = icon.url
+        else:
+            icon_path = icon_url = None
+
         if icon_path != self.icon_path:
+            self.log.info(f"Updating room icon of {self.name}")
             self.icon_path = icon_path
-            if icon and icon.url:
+            if icon_url:
                 resp = await client.read_image(icon.url)
                 self.icon_mxc = await self.main_intent.upload_media(resp.data, mime_type=resp.mime)
             else:
                 self.icon_mxc = ContentURI("")
             if self.mxid:
-                await self.main_intent.set_room_avatar(self.mxid, self.icon_mxc)
+                try:
+                    await self.main_intent.set_room_avatar(self.mxid, self.icon_mxc)
+                except Exception as e:
+                    self.log.exception(f"Failed to set room icon: {e}")
             return True
-        return False
+        else:
+            self.log.debug(f"No need to update room icon of {self.name}, new icon has same path as old one")
+            return False
 
     async def _update_participants(self, participants: List[Participant]) -> None:
         if not self.mxid:

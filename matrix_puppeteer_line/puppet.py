@@ -85,14 +85,24 @@ class Puppet(DBPuppet, BasePuppet):
         return False
 
     async def _update_avatar(self, avatar: Optional[PathImage], client: Client) -> bool:
-        if avatar and avatar.url and not avatar.path:
-            # Avatar exists, but in a form that cannot be uniquely identified.
-            # Skip it for now.
-            return False
-        avatar_path = avatar.path if avatar else None
-        if avatar_path != self.avatar_path or not self.avatar_set:
+        if avatar:
+            if avatar.url and not avatar.path:
+                if self.avatar_set and self.avatar_path:
+                    self.log.warn(f"Not updating user avatar of {self.name}: new avatar exists, but in a form that cannot be uniquely identified")
+                    return False
+                else:
+                    self.log.warn(f"Using URL as path for user avatar of {self.name}: no previous avatar exists")
+                    avatar_path = avatar_url = avatar.url
+            else:
+                avatar_path = avatar.path
+                avatar_url = avatar.url
+        else:
+            avatar_path = avatar_url = None
+
+        if not self.avatar_set or avatar_path != self.avatar_path:
+            self.log.info(f"Updating user avatar of {self.name}")
             self.avatar_path = avatar_path
-            if avatar and avatar.url:
+            if avatar_url:
                 resp = await client.read_image(avatar.url)
                 self.avatar_mxc = await self.intent.upload_media(resp.data, mime_type=resp.mime)
             else:
@@ -100,11 +110,13 @@ class Puppet(DBPuppet, BasePuppet):
             try:
                 await self.intent.set_avatar_url(self.avatar_mxc)
                 self.avatar_set = True
-            except Exception:
-                self.log.exception("Failed to set user avatar")
+            except Exception as e:
+                self.log.exception(f"Failed to set user avatar: {e}")
                 self.avatar_set = False
             return True
-        return False
+        else:
+            self.log.debug(f"No need to update user avatar of {self.name}, new avatar has same path as old one")
+            return False
 
     def _add_to_cache(self) -> None:
         self.by_mid[self.mid] = self

@@ -166,8 +166,8 @@ class MautrixController {
 	/**
 	 * Try to match a user against an entry in the friends list to get their ID.
 	 *
-	 * @param {Element} element - The display name of the user to find the ID for.
-	 * @return {?string}        - The user's ID if found.
+	 * @param {string} senderName - The display name of the user to find the ID for.
+	 * @return {?string}          - The user's ID if found.
 	 */
 	getUserIdFromFriendsList(senderName) {
 		return document.querySelector(`#contact_wrap_friends > ul > li[title='${senderName}']`)?.getAttribute("data-mid")
@@ -518,10 +518,14 @@ class MautrixController {
 	/**
 	 * @typedef PathImage
 	 * @type object
-	 * @property {string} path - The virtual path of the image (behaves like an ID)
-	 * @property {string} src  - The URL of the image
+	 * @property {?string} path - The virtual path of the image (behaves like an ID). Optional.
+	 * @property {string} src   - The URL of the image. Mandatory.
 	 */
 
+	/**
+	 * @param {Element} img - The image element to get the URL and path of.
+	 * @return {?PathImage} - The image URL and its path, if found.
+	 */
 	_getPathImage(img) {
 		if (img && img.src.startsWith("blob:")) {
 			// NOTE Having a blob but no path means the image exists,
@@ -539,9 +543,9 @@ class MautrixController {
 	/**
 	 * @typedef Participant
 	 * @type object
-	 * @property {string} id        - The member ID for the participant
-	 * @property {PathImage} avatar - The path and blob URL of the participant's avatar
-	 * @property {string} name      - The contact list name of the participant
+	 * @property {string} id         - The member ID for the participant
+	 * @property {?PathImage} avatar - The path and blob URL of the participant's avatar
+	 * @property {string} name       - The contact list name of the participant
 	 */
 
 	getParticipantListItemName(element) {

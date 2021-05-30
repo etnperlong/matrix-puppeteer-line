@@ -26,7 +26,7 @@ class RPCError(Exception):
 
 @dataclass
 class PathImage(SerializableAttrs['PathImage']):
-    path: str
+    path: Optional[str]
     url: str
 
 
