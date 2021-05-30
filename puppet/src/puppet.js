@@ -246,16 +246,20 @@ export default class MessagesPuppeteer {
 		} catch (err) {
 			//this._sendLoginFailure(`Failed to sync: ${err}`)
 			this.log("LINE's sync took too long, assume it's fine and carry on...")
+		} finally {
+			const syncText = await this.page.evaluate(
+				messageSyncElement => messageSyncElement.innerText,
+				result)
+			this.log(`Final sync text is: "${syncText}"`)
 		}
 
 		this.loginRunning = false
 		// Don't start observing yet, instead wait for explicit request.
 		// But at least view the most recent chat.
 		try {
-			let mostRecentChatID = await this.page.$eval("#_chat_list_body li",
-				element => window.getChatListItemID(element))
+			const mostRecentChatID = await this.page.$eval("#_chat_list_body li",
+				element => window.__mautrixController.getChatListItemID(element.firstElementChild))
 			await this._switchChat(mostRecentChatID)
-			this.log("Focused on most recent chat")
 		} catch (e) {
 			this.log("No chats available to focus on")
 		}
