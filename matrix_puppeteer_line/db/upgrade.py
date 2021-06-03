@@ -109,7 +109,23 @@ async def upgrade_read_receipts(conn: Connection) -> None:
 @upgrade_table.register(description="Media metadata")
 async def upgrade_deduplicate_blob(conn: Connection) -> None:
     await conn.execute("""ALTER TABLE media
-       ADD COLUMN IF NOT EXISTS mime_type  TEXT,
-       ADD COLUMN IF NOT EXISTS file_name  TEXT,
-       ADD COLUMN IF NOT EXISTS size       INTEGER
+        ADD COLUMN IF NOT EXISTS mime_type  TEXT,
+        ADD COLUMN IF NOT EXISTS file_name  TEXT,
+        ADD COLUMN IF NOT EXISTS size       INTEGER
    """)
+
+
+@upgrade_table.register(description="Strangers")
+async def upgrade_strangers(conn: Connection) -> None:
+    await conn.execute("""
+    CREATE TABLE IF NOT EXISTS stranger (
+        fake_mid     TEXT NOT NULL UNIQUE,
+        name         TEXT NOT NULL,
+        avatar_path  TEXT NOT NULL,
+        available    BOOLEAN NOT NULL DEFAULT false,
+
+        PRIMARY KEY (name, avatar_path),
+        FOREIGN KEY (fake_mid)
+            REFERENCES puppet (mid)
+            ON DELETE CASCADE
+   )""")

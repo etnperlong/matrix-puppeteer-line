@@ -205,29 +205,34 @@ class Portal(DBPortal, BasePortal):
                 intent = None
         return intent
 
-    async def handle_remote_message(self, source: 'u.User', sender: Optional['p.Puppet'],
-                                    evt: Message) -> None:
+    async def handle_remote_message(self, source: 'u.User', evt: Message) -> None:
+        if await DBMessage.get_by_mid(evt.id):
+            self.log.debug(f"Ignoring duplicate message {evt.id}")
+            return
+
         if evt.is_outgoing:
             if source.intent:
+                sender = None
                 intent = source.intent
             else:
                 if not self.invite_own_puppet_to_pm:
                     self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
                     return
+                sender = p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
                 intent = await self._bridge_own_message_pm(source, sender, f"message {evt.id}")
                 if not intent:
                     return
-        elif self.other_user:
-            intent = (await p.Puppet.get_by_mid(self.other_user)).intent
-        elif sender:
-            intent = sender.intent
         else:
-            self.log.warning(f"Ignoring message {evt.id}: sender puppet is unavailable")
-            return
-
-        if await DBMessage.get_by_mid(evt.id):
-            self.log.debug(f"Ignoring duplicate message {evt.id}")
-            return
+            sender = await p.Puppet.get_by_mid(self.other_user if self.is_direct else evt.sender.id)
+            # TODO Respond to name/avatar changes of users in a DM
+            if not self.is_direct:
+                if sender:
+                    await sender.update_info(evt.sender, source.client)
+                else:
+                    self.log.warning(f"Could not find ID of LINE user who sent event {evt.id}")
+                    sender = await p.Puppet.get_by_profile(evt.sender, source.client)
+            intent = sender.intent
+            intent.ensure_joined(self.mxid)
 
         if evt.image and evt.image.url:
             if not evt.image.is_sticker or self.config["bridge.receive_stickers"]:
@@ -318,6 +323,9 @@ class Portal(DBPortal, BasePortal):
                 format=Format.HTML if msg_html else None,
                 body=msg_text, formatted_body=msg_html)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
+        # TODO Joins/leaves/invites/rejects, which are sent as LINE message events after all!
+        #      Also keep track of strangers who leave / get blocked / become friends
+        #      (maybe not here for all of that)
         else:
             content = TextMessageEventContent(
                 msgtype=MessageType.NOTICE,
@@ -349,11 +357,13 @@ class Portal(DBPortal, BasePortal):
             if reaction:
                 await self.main_intent.redact(self.mxid, reaction.mxid)
                 await reaction.delete()
+            # If there are as many receipts as there are chat participants, then everyone
+            # must have read the message, so send real read receipts from each puppet.
             # TODO Not just -1 if there are multiple _OWN_ puppets...
             if receipt_count == len(self._last_participant_update) - 1:
-                for participant in filter(lambda participant: not p.Puppet.is_mid_for_own_puppet(participant), self._last_participant_update):
-                    puppet = await p.Puppet.get_by_mid(participant)
-                    await puppet.intent.send_receipt(self.mxid, event_id)
+                for mid in filter(lambda mid: not p.Puppet.is_mid_for_own_puppet(mid), self._last_participant_update):
+                    intent = (await p.Puppet.get_by_mid(mid)).intent
+                    await intent.send_receipt(self.mxid, event_id)
             else:
                 # TODO Translatable string for "Read by"
                 reaction_mxid = await self.main_intent.react(self.mxid, event_id, f"(Read by {receipt_count})")
@@ -418,8 +428,13 @@ class Portal(DBPortal, BasePortal):
             if self._main_intent is self.az.intent:
                 self._main_intent = (await p.Puppet.get_by_mid(self.other_user)).intent
         for participant in conv.participants:
-            puppet = await p.Puppet.get_by_mid(participant.id)
-            await puppet.update_info(participant, client)
+            # REMINDER: multi-user chats include your own LINE user in the participant list
+            if participant.id != None:
+                puppet = await p.Puppet.get_by_mid(participant.id, client)
+                await puppet.update_info(participant, client)
+            else:
+                self.log.warning(f"Could not find ID of LINE user {participant.name}")
+                puppet = await p.Puppet.get_by_profile(participant, client)
         # TODO Consider setting no room name for non-group chats.
         #      But then the LINE bot itself may appear in the title...
         changed = await self._update_name(f"{conv.name} (LINE)")
@@ -480,7 +495,12 @@ class Portal(DBPortal, BasePortal):
             return
 
         # Store the current member list to prevent unnecessary updates
-        current_members = {participant.id for participant in participants}
+        current_members = set()
+        for participant in participants:
+            current_members.add(
+                participant.id if participant.id != None else \
+                (await p.Puppet.get_by_profile(participant)).mid)
+
         if current_members == self._last_participant_update:
             self.log.trace("Not updating participants: list matches cached list")
             return
@@ -495,7 +515,7 @@ class Portal(DBPortal, BasePortal):
         for participant in participants:
             if forbid_own_puppets and p.Puppet.is_mid_for_own_puppet(participant.id):
                 continue
-            intent = (await p.Puppet.get_by_mid(participant.id)).intent
+            intent = (await p.Puppet.get_by_sender(participant)).intent
             await intent.ensure_joined(self.mxid)
 
         print(current_members)
@@ -536,15 +556,8 @@ class Portal(DBPortal, BasePortal):
 
         self.log.debug("Got %d messages from server", len(messages))
         async with NotificationDisabler(self.mxid, source):
-            # Member joins/leaves are not shown in chat history.
-            # Best we can do is have a puppet join if its user had sent a message.
-            members_known = set(await self.main_intent.get_room_members(self.mxid)) if not self.is_direct else None
             for evt in messages:
-                puppet = await p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
-                if puppet and evt.sender.id not in members_known:
-                    await puppet.update_info(evt.sender, source.client)
-                    members_known.add(evt.sender.id)
-                await self.handle_remote_message(source, puppet, evt)
+                await self.handle_remote_message(source, evt)
         self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
 
     @property
@@ -680,10 +693,8 @@ class Portal(DBPortal, BasePortal):
             self.by_mxid[self.mxid] = self
             await self.backfill(source)
             if not self.is_direct:
-                # For multi-user chats, backfill before updating participants,
-                # to act as as a best guess of when users actually joined.
-                # No way to tell when a user actually left, so just check the
-                # participants list after backfilling.
+                # TODO Joins and leaves are (usually) shown after all, so track them properly.
+                #      In the meantime, just check the participants list after backfilling.
                 await self._update_participants(info.participants)
 
         return self.mxid

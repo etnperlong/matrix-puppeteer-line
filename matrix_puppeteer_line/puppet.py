@@ -19,7 +19,7 @@ from mautrix.bridge import BasePuppet
 from mautrix.types import UserID, ContentURI
 from mautrix.util.simple_template import SimpleTemplate
 
-from .db import Puppet as DBPuppet
+from .db import Puppet as DBPuppet, Stranger
 from .config import Config
 from .rpc import Participant, Client, PathImage
 from . import user as u
@@ -141,6 +141,9 @@ class Puppet(DBPuppet, BasePuppet):
 
     @classmethod
     async def get_by_mid(cls, mid: str, create: bool = True) -> Optional['Puppet']:
+        if mid is None:
+            return None
+
         # TODO Might need to parse a real id from "_OWN"
         try:
             return cls.by_mid[mid]
@@ -160,10 +163,38 @@ class Puppet(DBPuppet, BasePuppet):
 
         return None
 
+    @classmethod
+    async def get_by_profile(cls, info: Participant, client: Optional[Client] = None) -> 'Puppet':
+        stranger = await Stranger.get_by_profile(info)
+        if not stranger:
+            stranger = await Stranger.init_available_or_new()
+
+            puppet = cls(stranger.fake_mid)
+            # NOTE An update will insert anyways, so just do it now
+            await puppet.insert()
+            await puppet.update_info(info, client)
+            puppet._add_to_cache()
+
+            # Get path from puppet in case it uses the URL as the path.
+            # But that should never happen in practice for strangers,
+            # which should only occur in rooms, where avatars have paths.
+            stranger.avatar_path = puppet.avatar_path
+            stranger.name = info.name
+            await stranger.insert()
+            # TODO Need a way to keep stranger name/avatar up to date,
+            #      lest name/avatar changes get seen as another stranger.
+            #      Also need to detect when a stranger becomes a friend.
+        return await cls.get_by_mid(stranger.fake_mid)
+
+    @classmethod
+    async def get_by_sender(cls, info: Participant, client: Optional[Client] = None) -> 'Puppet':
+        puppet = await cls.get_by_mid(info.id)
+        return puppet if puppet else await cls.get_by_profile(info, client)
+
     # TODO When supporting multiple bridge users, this should return the user whose puppet this is
     @classmethod
     def is_mid_for_own_puppet(cls, mid) -> bool:
-        return mid.startswith("_OWN_") if mid else False
+        return mid and mid.startswith("_OWN_")
 
     @classmethod
     async def get_by_custom_mxid(cls, mxid: UserID) -> Optional['u.User']:

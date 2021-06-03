@@ -238,10 +238,18 @@ class MautrixController {
 			sender.id = this.getUserIdFromFriendsList(sender.name)
 			// Group members aren't necessarily friends,
 			// but the participant list includes their ID.
+			// ROOMS DO NOT!! Ugh.
 			if (!sender.id) {
 				const participantsList = document.querySelector(participantsListSelector)
-				imgElement = participantsList.querySelector(`img[alt='${sender.name}'`)
-				sender.id = imgElement.parentElement.parentElement.getAttribute("data-mid")
+				// Groups use a participant's name as the alt text of their avatar image,
+				// but rooms do not...ARGH! But they both use a dedicated element for it.
+				const participantNameElement =
+					Array.from(participantsList.querySelectorAll(`.mdRGT13Ttl`))
+					.find(e => e.innerText == sender.name)
+				if (participantNameElement) {
+					imgElement = participantNameElement.previousElementSibling.firstElementChild
+					sender.id = imgElement?.parentElement.parentElement.getAttribute("data-mid")
+				}
 			} else {
 				imgElement = element.querySelector(".mdRGT07Img > img")
 			}

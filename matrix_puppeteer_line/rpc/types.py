@@ -41,9 +41,9 @@ class ChatListInfo(SerializableAttrs['ChatListInfo']):
 
 @dataclass
 class Participant(SerializableAttrs['Participant']):
-    id: str
-    avatar: Optional[PathImage]
     name: str
+    avatar: Optional[PathImage]
+    id: Optional[str] = None
 
 
 @dataclass
