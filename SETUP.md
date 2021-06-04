@@ -38,3 +38,5 @@ An easy way to do so is to install `xvfb` from your distribution, and run the Pu
 
 # Upgrading
 Simply `git pull` or `git rebase` the latest changes, and rerun any installation commands (`yarn --production`, `pip install -Ur ...`).
+
+To upgrade the LINE extension used by Puppeteer, simply download and extract the latest .crx in the same location as for initial setup.

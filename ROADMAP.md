@@ -52,7 +52,7 @@
     * [x] Rooms (unnamed chats / "multi-user direct chats")
   * [ ] Membership actions
     * [x] Add member
-    * [x] Remove member
+    * [ ] Remove member
     * [ ] Block
 * Misc
   * [x] Automatic portal creation
