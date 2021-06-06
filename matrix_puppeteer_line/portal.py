@@ -628,9 +628,11 @@ class Portal(DBPortal, BasePortal):
                 "users": {
                     self.az.bot_mxid: 100,
                     self.main_intent.mxid: 100,
+                    source.mxid: 25,
                 },
                 "events": {
-                    str(EventType.REACTION): 1
+                    str(EventType.REACTION): 100,
+                    str(EventType.ROOM_ENCRYPTION): 25,
                 }
             }
         })
