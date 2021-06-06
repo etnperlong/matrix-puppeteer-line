@@ -29,12 +29,14 @@ class Media:
 
     media_id: str
     mxc: ContentURI
-    # TODO Consider whether mime_type, file_name, and size are needed.
+    mime_type: str
+    file_name: str
+    size: int
 
     async def insert(self) -> None:
-        q = ("INSERT INTO media (media_id, mxc) "
-             "VALUES ($1, $2)")
-        await self.db.execute(q, self.media_id, self.mxc)
+        q = ("INSERT INTO media (media_id, mxc, mime_type, file_name, size) "
+             "VALUES ($1, $2, $3, $4, $5)")
+        await self.db.execute(q, self.media_id, self.mxc, self.mime_type, self.file_name, self.size)
 
     async def update(self) -> None:
         q = ("UPDATE media SET mxc=$2 "
@@ -42,8 +44,8 @@ class Media:
         await self.db.execute(q, self.media_id, self.mxc)
 
     @classmethod
-    async def get_by_id(cls, media_id: str) -> Optional[ContentURI]:
-        q = ("SELECT media_id, mxc "
+    async def get_by_id(cls, media_id: str) -> Optional['DBMedia']:
+        q = ("SELECT media_id, mxc, mime_type, file_name, size "
              "FROM media WHERE media_id=$1")
         row = await cls.db.fetchrow(q, media_id)
         if not row:

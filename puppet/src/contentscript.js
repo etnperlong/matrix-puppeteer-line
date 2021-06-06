@@ -69,16 +69,18 @@ window.__mautrixExpiry = function (button) {}
  * @return {Promise<void>}
  */
 window.__mautrixReceiveMessageID = function(id) {}
-/**
- * @return {Promise<Element>}
- */
-window.__mautrixShowParticipantsList = function() {}
 
+/**
+ * typedef ChatTypeEnum
+ */
 const ChatTypeEnum = Object.freeze({
 	DIRECT: 1,
 	GROUP: 2,
 	ROOM: 3,
 })
+
+const MSG_DECRYPTING = "ⓘ Decrypting..."
+// TODO consts for common selectors
 
 class MautrixController {
 	constructor() {
@@ -92,7 +94,6 @@ class MautrixController {
 		this.pinAppearObserver = null
 		this.ownID = null
 
-		this.ownMsgPromise = Promise.resolve(-1)
 		this._promiseOwnMsgReset()
 	}
 
@@ -172,28 +173,45 @@ class MautrixController {
 	 * @typedef MessageData
 	 * @type {object}
 	 * @property {number}  id          - The ID of the message. Seems to be sequential.
-	 * @property {number}  timestamp   - The unix timestamp of the message. Not very accurate.
+	 * @property {number}  timestamp   - The unix timestamp of the message. Accurate to the minute.
 	 * @property {boolean} is_outgoing - Whether or not this user sent the message.
 	 * @property {?Participant} sender - Full data of the participant who sent the message, if needed and available.
 	 * @property {?string} html        - The HTML format of the message, if necessary.
-	 * @property {?string} image_url   - The URL to the image in the message, if it's an image-only message.
+	 * @property {?ImageInfo} image    - Information of the image in the message, if it's an image-only message.
 	 * @property {?int} receipt_count  - The number of users who have read the message.
 	 */
 
+	/**
+	 * @typedef ImageInfo
+	 * @type {object}
+	 * @property {string} url - The URL of the image's location.
+	 * @property {boolean} is_sticker - Whether the sent image is a sticker.
+	 * @property {boolean} animated   - Whether the sent image is animated. Only used for stickers (for now...?).
+	 */
+
+	/**
+	 * Return whether a URL points to a loaded image or not.
+	 *
+	 * @param {string} src
+	 * @return boolean
+	 * @private
+	 */
 	_isLoadedImageURL(src) {
-		return src && (src.startsWith("blob:") || src.startsWith("res/"))
+		return src && (
+			src.startsWith(`blob:`) ||
+			src.startsWith(`${document.location.origin}/res/`) && !src.startsWith(`${document.location.origin}/res/img/noimg/`))
 	}
 
 	/**
-	 * Parse a message element (mws-message-wrapper)
+	 * Parse a message element.
 	 *
-	 * @param {Date}    date    - The most recent date indicator.
 	 * @param {Element} element - The message element.
-	 * @param {int} chatType    - What kind of chat this message is part of.
-	 * @return {MessageData}
+	 * @param {Number} chatType - What kind of chat this message is part of.
+	 * @param {Date} refDate    - The most recent date indicator. If undefined, do not retrieve the timestamp of this message.
+	 * @return {Promise<MessageData>}
 	 * @private
 	 */
-	async _parseMessage(date, element, chatType) {
+	async _parseMessage(element, chatType, refDate) {
 		const is_outgoing = element.classList.contains("mdRGT07Own")
 		let sender = {}
 
@@ -208,6 +226,7 @@ class MautrixController {
 			sender = null
 			receipt_count = is_outgoing ? (receipt ? 1 : 0) : null
 		} else if (!is_outgoing) {
+			let imgElement
 			sender.name = element.querySelector(".mdRGT07Body > .mdRGT07Ttl").innerText
 			// Room members are always friends (right?),
 			// so search the friend list for the sender's name
@@ -216,23 +235,23 @@ class MautrixController {
 			// Group members aren't necessarily friends,
 			// but the participant list includes their ID.
 			if (!sender.id) {
-				await window.__mautrixShowParticipantsList()
 				const participantsList = document.querySelector(participantsListSelector)
-				sender.id = participantsList.querySelector(`img[alt='${senderName}'`).parentElement.parentElement.getAttribute("data-mid")
+				imgElement = participantsList.querySelector(`img[alt='${sender.name}'`)
+				sender.id = imgElement.parentElement.parentElement.getAttribute("data-mid")
+			} else {
+				imgElement = element.querySelector(".mdRGT07Img > img")
 			}
-			sender.avatar = this.getParticipantListItemAvatar(element)
+			sender.avatar = this._getPathImage(imgElement)
 			receipt_count = null
 		} else {
 			// TODO Get own ID and store it somewhere appropriate.
 			//      Unable to get own ID from a room chat...
 			// if (chatType == ChatTypeEnum.GROUP) {
-			// 	await window.__mautrixShowParticipantsList()
 			// 	const participantsList = document.querySelector("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
 			// 	// TODO The first member is always yourself, right?
 			// 	// TODO Cache this so own ID can be used later
 			// 	sender = participantsList.children[0].getAttribute("data-mid")
 			// }
-			await window.__mautrixShowParticipantsList()
 			const participantsList = document.querySelector(participantsListSelector)
 			sender.name = this.getParticipantListItemName(participantsList.children[0])
 			sender.avatar = this.getParticipantListItemAvatar(participantsList.children[0])
@@ -243,54 +262,173 @@ class MautrixController {
 
 		const messageData = {
 			id: +element.getAttribute("data-local-id"),
-			timestamp: date ? date.getTime() : null,
+			timestamp:
+				refDate !== undefined
+				? (await this._tryParseDate(element.querySelector("time")?.innerText, refDate))?.getTime()
+				: null,
 			is_outgoing: is_outgoing,
 			sender: sender,
-			receipt_count: receipt_count
+			receipt_count: receipt_count,
 		}
-		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
-		if (messageElement.classList.contains("mdRGT07Text")) {
-			messageData.html = messageElement.querySelector(".mdRGT07MsgTextInner")?.innerHTML
-		} else if (
-			messageElement.classList.contains("mdRGT07Image") ||
-			messageElement.classList.contains("mdRGT07Sticker")
-		) {
-			const img = messageElement.querySelector(".mdRGT07MsgImg > img")
-			if (img) {
-				let imgResolve
-				// TODO Should reject on "#_chat_message_image_failure"
-				let observer = new MutationObserver(changes => {
-					for (const change of changes) {
-						if (this._isLoadedImageURL(change.target.src) && observer) {
-							observer.disconnect()
-							observer = null
-							imgResolve(change.target.src)
-							return
-						}
-					}
-				})
-				observer.observe(img, { attributes: true, attributeFilter: ["src"] })
 
-				if (this._isLoadedImageURL(img.src)) {
-					// Check for this AFTER attaching the observer, in case
-					// the image loaded after the img element was found but
-					// before the observer was attached.
-					messageData.image_url = img.src
-					observer.disconnect()
-				} else {
-					messageData.image_url = await new Promise(resolve => {
-						imgResolve = resolve
-						setTimeout(() => {
-							if (observer) {
-								observer.disconnect()
-								resolve(img.src)
-							}
-						}, 10000) // Longer timeout for image downloads
-					})
+		const messageElement = element.querySelector(".mdRGT07Body > .mdRGT07Msg")
+		const is_sticker = messageElement.classList.contains("mdRGT07Sticker")
+		if (messageElement.classList.contains("mdRGT07Text")) {
+			let msgSpan = messageElement.querySelector(".mdRGT07MsgTextInner")
+			try {
+				if (msgSpan.innerHTML == MSG_DECRYPTING) {
+					msgSpan = await this._waitForDecryptedMessage(element, msgSpan, 5000)
 				}
+				messageData.html = await this._parseMessageHTML(msgSpan)
+			} catch {
+				// Throw to reject, but return what was parsed so far
+				throw messageData
+			}
+		} else if (is_sticker || messageElement.classList.contains("mdRGT07Image")) {
+			// TODO Animated non-sticker images require clicking its img element, which is just a thumbnail
+			// Real image: "#wrap_single_image img"
+			// Close button: "#wrap_single_image button"
+			// Viewer is open/closed based on "#wrap_single_image.MdNonDisp" / "#wrap_single_image:not(.MdNonDisp)"
+			let img = messageElement.querySelector(".mdRGT07MsgImg > img")
+			if (!this._isLoadedImageURL(img.src)) {
+				try {
+					img = await this._waitForLoadedImage(img, 10000)
+				} catch {
+					// Throw to reject, but return what was parsed so far
+					throw messageData
+				}
+			}
+			messageData.image = {
+				url: img.src,
+				is_sticker: is_sticker,
+				is_animated: is_sticker && img.parentElement.classList.contains("animationSticker"),
 			}
 		}
 		return messageData
+	}
+
+	/**
+	 * @param {Element} msgSpan
+	 * @return Promise<DOMString>
+	 * @private
+	 */
+	async _parseMessageHTML(msgSpan) {
+		const msgSpanImgs = msgSpan.getElementsByTagName("img")
+		if (msgSpanImgs.length == 0) {
+			return msgSpan.innerHTML
+		} else {
+			const unloadedImgs = Array.from(msgSpanImgs).filter(img => !this._isLoadedImageURL(img.src))
+			if (unloadedImgs.length > 0) {
+				// NOTE Use allSettled to not throw if any images time out
+				await Promise.allSettled(
+					unloadedImgs.map(img => this._waitForLoadedImage(img, 2000))
+				)
+			}
+
+			// Hack to put sticon dimensions in HTML (which are excluded by default)
+			// in such a way that doesn't alter the elements that are in the DOM
+			const msgSpanCopy = msgSpan.cloneNode(true)
+			const msgSpanCopyImgs = msgSpanCopy.getElementsByTagName("img")
+			for (let i = 0, n = msgSpanImgs.length; i < n; i++) {
+				msgSpanCopyImgs[i].height = msgSpanImgs[i].height
+				msgSpanCopyImgs[i].width  = msgSpanImgs[i].width
+			}
+			return msgSpanCopy.innerHTML
+		}
+	}
+
+	/**
+	 * @param {Element} element
+	 * @param {Element} msgSpan
+	 * @param {Number} timeoutLimitMillis
+	 * @return {Promise<Element>}
+	 * @private
+	 */
+	_waitForDecryptedMessage(element, msgSpan, timeoutLimitMillis) {
+		console.debug("Wait for message element to finish decrypting")
+		console.debug(element)
+		return new Promise((resolve, reject) => {
+			let observer = new MutationObserver(changes => {
+				for (const change of changes) {
+					const isTextUpdate = change.type == "characterData"
+					const target = isTextUpdate ? msgSpan : element.querySelector(".mdRGT07MsgTextInner")
+					if (target && target.innerHTML != MSG_DECRYPTING) {
+						if (isTextUpdate) {
+							console.debug("UNLIKELY(?) EVENT -- Found decrypted message from text update")
+						} else {
+							// TODO Looks like it's div.mdRGT07Body that gets always replaced. If so, watch only for that
+							console.debug("Found decrypted message from element replacement")
+							console.debug(target)
+							console.debug("Added:")
+							for (const change of changes) {
+								console.debug(change.removedNodes)
+							}
+							console.debug("Removed:")
+							for (const change of changes) {
+								console.debug(change.addedNodes)
+							}
+						}
+						observer.disconnect()
+						observer = null
+						resolve(target)
+						return
+					}
+					if (target && target != msgSpan) {
+						console.debug("UNLIKELY EVENT -- Somehow added a new \"decrypting\" span, it's the one to watch now")
+						console.debug(target)
+						msgSpan = target
+						observer.observe(msgSpan, { characterData: true })
+					}
+				}
+			})
+			// Either the span element or one of its ancestors is replaced,
+			// or the span element's content is updated.
+			// Not exactly sure which of these happens, or if the same kind
+			// of mutation always happens, so just look for them all...
+			observer.observe(element, { childList: true, subtree: true })
+			observer.observe(msgSpan, { characterData: true })
+			setTimeout(() => {
+				if (observer) {
+					observer.disconnect()
+					// Don't print log message, as this may be a safe timeout
+					reject()
+				}
+			}, timeoutLimitMillis)
+		})
+	}
+
+	/**
+	 * @param {Element} img
+	 * @param {Number} timeoutLimitMillis
+	 * @return {Promise<Element>}
+	 * @private
+	 */
+	_waitForLoadedImage(img, timeoutLimitMillis) {
+		console.debug("Wait for image element to finish loading")
+		console.debug(img)
+		// TODO Should reject on "#_chat_message_image_failure"
+		return new Promise((resolve, reject) => {
+			let observer = new MutationObserver(changes => {
+				for (const change of changes) {
+					if (this._isLoadedImageURL(change.target.src)) {
+						console.debug("Image element finished loading")
+						console.debug(change.target)
+						observer.disconnect()
+						observer = null
+						resolve(change.target)
+						return
+					}
+				}
+			})
+			observer.observe(img, { attributes: true, attributeFilter: ["src"] })
+			setTimeout(() => {
+				if (observer) {
+					observer.disconnect()
+					// Don't print log message, as this may be a safe timeout
+					reject()
+				}
+			}, timeoutLimitMillis)
+		})
 	}
 
 	/**
@@ -313,8 +451,8 @@ class MautrixController {
 	 * has succeeded or failed to be sent.
 	 *
 	 * @param {int} timeoutLimitMillis - The maximum amount of time to wait for the message to be sent.
-	 * @param {str} successSelector - The selector for the element that indicates the message was sent.
-	 * @param {str} failureSelector - The selector for the element that indicates the message failed to be sent.
+	 * @param {string} successSelector - The selector for the element that indicates the message was sent.
+	 * @param {?string} failureSelector - The selector for the element that indicates the message failed to be sent.
 	 */
 	promiseOwnMessage(timeoutLimitMillis, successSelector, failureSelector=null) {
 		this.promiseOwnMsgSuccessSelector = successSelector
@@ -323,13 +461,13 @@ class MautrixController {
 		this.ownMsgPromise = new Promise((resolve, reject) => {
 			this.promiseOwnMsgResolve = resolve
 			this.promiseOwnMsgReject = reject
-			setTimeout(() => {
-				if (this.promiseOwnMsgReject) {
-					console.log("Timeout!")
-					this._rejectOwnMessage()
-				}
-			}, timeoutLimitMillis)
 		})
+		this.promiseOwnMsgTimeoutID = setTimeout(() => {
+			if (this.promiseOwnMsgReject) {
+				console.error("Timed out waiting for own message to be sent")
+				this._rejectOwnMessage()
+			}
+		}, timeoutLimitMillis)
 	}
 
 	/**
@@ -338,40 +476,39 @@ class MautrixController {
 	 * @return {Promise<int>} - The ID of the sent message.
 	 */
 	async waitForOwnMessage() {
-		return await this.ownMsgPromise
-	}
-
-	async _tryParseMessages(msgList, chatType) {
-		const messages = []
-		let refDate = null
-		for (const child of msgList) {
-			if (child.classList.contains("mdRGT10Date")) {
-				refDate = await this._tryParseDateSeparator(child.firstElementChild.innerText)
-			} else if (child.classList.contains("MdRGT07Cont")) {
-				// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
-				// 		but that is unlikely to be a problem here.
-				// 		Also, offscreen times may have .MdNonDisp on them
-				// TODO Explicitly look for the most recent date element,
-				//      as it might not have been one of the new items in msgList
-				const timeElement = child.querySelector("time")
-				if (timeElement) {
-					const messageDate = await this._tryParseDate(timeElement.innerText, refDate)
-					messages.push(await this._parseMessage(messageDate, child, chatType))
-				}
-			}
-		}
-		return messages
+		return this.ownMsgPromise ? await this.ownMsgPromise : -1
 	}
 
 	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
-	 * @return {[MessageData]} - A list of messages.
+	 * @param {int} minID - The minimum message ID to consider.
+	 * @return {Promise<[MessageData]>} - A list of messages.
 	 */
-	async parseMessageList() {
-		const msgList = Array.from(document.querySelectorAll("#_chat_room_msg_list > div[data-local-id]"))
-		msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
-		return await this._tryParseMessages(msgList, this.getChatType(this.getCurrentChatID()))
+	async parseMessageList(minID = 0) {
+		console.debug(`minID for full refresh: ${minID}`)
+		const msgList =
+			Array.from(document.querySelectorAll("#_chat_room_msg_list > div[data-local-id]"))
+			.filter(msg =>
+				msg.hasAttribute("data-local-id") &&
+				(!msg.classList.contains("MdRGT07Cont") || msg.getAttribute("data-local-id") > minID))
+		if (msgList.length == 0) {
+			return []
+		}
+		const messagePromises = []
+		const chatType = this.getChatType(this.getCurrentChatID())
+		let refDate = null
+		for (const child of msgList) {
+			if (child.classList.contains("mdRGT10Date")) {
+				refDate = await this._tryParseDateSeparator(child.firstElementChild.innerText)
+			} else if (child.classList.contains("MdRGT07Cont")) {
+				messagePromises.push(this._parseMessage(child, chatType, refDate))
+			}
+		}
+		// NOTE No message should ever time out, but use allSettled to not throw if any do
+		return (await Promise.allSettled(messagePromises))
+		.filter(value => value.status == "fulfilled")
+		.map(value => value.value)
 	}
 
 	/**
@@ -439,7 +576,7 @@ class MautrixController {
 			const name = this.getParticipantListItemName(child)
 			const id = this.getParticipantListItemID(child) || this.getUserIdFromFriendsList(name)
 			return {
-				id: id, // NOTE Don't want non-own user's ID to ever be null.
+				id: id,
 				avatar: this.getParticipantListItemAvatar(child),
 				name: name,
 			}
@@ -497,26 +634,13 @@ class MautrixController {
 
 	/**
 	 * Parse the list of recent/saved chats.
+	 *
 	 * @return {[ChatListInfo]} - The list of chats.
 	 */
 	parseChatList() {
 		const chatList = document.querySelector("#_chat_list_body")
 		return Array.from(chatList.children).map(
 			child => this.parseChatListItem(child.firstElementChild))
-	}
-
-	/**
-	 * TODO
-	 * Check if an image has been downloaded.
-	 *
-	 * @param {number} id - The ID of the message whose image to check.
-	 * @return {boolean} - Whether or not the image has been downloaded
-	 */
-	imageExists(id) {
-		const imageElement = document.querySelector(
-			`mws-message-wrapper[msg-id="${id}"] mws-image-message-part .image-msg`)
-		return !imageElement.classList.contains("not-rendered")
-			&& imageElement.getAttribute("src") !== ""
 	}
 
 	/**
@@ -544,7 +668,6 @@ class MautrixController {
 		// TODO Observe *added/removed* chats, not just new messages
 		const changedChatIDs = new Set()
 		for (const change of mutations) {
-			console.debug("Chat list mutation:", change)
 			if (change.target.id == "_chat_list_body") {
 				// TODO
 				// These could be new chats, or they're
@@ -555,16 +678,16 @@ class MautrixController {
 				*/
 			} else if (change.target.tagName == "LI") {
 				if (change.target.classList.contains("ExSelected")) {
-					console.log("Not using chat list mutation response for currently-active chat")
+					console.debug("Not using chat list mutation response for currently-active chat")
 					continue
 				}
 				for (const node of change.addedNodes) {
 					const chat = this.parseChatListItem(node)
 					if (chat) {
-						console.log("Changed chat list item:", chat)
+						console.log("Added chat list item:", chat)
 						changedChatIDs.add(chat.id)
 					} else {
-						console.debug("Could not parse node as a chat list item:", node)
+						console.debug("Could not parse added node as a chat list item:", node)
 					}
 				}
 			}
@@ -584,10 +707,12 @@ class MautrixController {
 	addChatListObserver() {
 		this.removeChatListObserver()
 		this.chatListObserver = new MutationObserver(async (mutations) => {
-			// Wait for pending sent messages to be resolved before responding to mutations
-			try {
-				await this.ownMsgPromise
-			} catch (e) {}
+			if (this.ownMsgPromise) {
+				// Wait for pending sent messages to be resolved before responding to mutations
+				try {
+					await this.ownMsgPromise
+				} catch (e) {}
+			}
 
 			try {
 				this._observeChatListMutations(mutations)
@@ -598,7 +723,7 @@ class MautrixController {
 		this.chatListObserver.observe(
 			document.querySelector("#_chat_list_body"),
 			{ childList: true, subtree: true })
-		console.debug("Started chat list observer")
+		console.log("Started chat list observer")
 	}
 
 	/**
@@ -608,13 +733,13 @@ class MautrixController {
 		if (this.chatListObserver !== null) {
 			this.chatListObserver.disconnect()
 			this.chatListObserver = null
-			console.debug("Disconnected chat list observer")
+			console.log("Disconnected chat list observer")
 		}
 	}
 
 	/**
 	 * @param {[MutationRecord]} mutations - The mutation records that occurred
-	 * @param {str} chatID - The ID of the chat being observed.
+	 * @param {string} chatID - The ID of the chat being observed.
 	 * @private
 	 */
 	_observeReceiptsDirect(mutations, chatID) {
@@ -641,7 +766,7 @@ class MautrixController {
 
 	/**
 	 * @param {[MutationRecord]} mutations - The mutation records that occurred
-	 * @param {str} chatID - The ID of the chat being observed.
+	 * @param {string} chatID - The ID of the chat being observed.
 	 * @private
 	 */
 	_observeReceiptsMulti(mutations, chatID) {
@@ -649,17 +774,17 @@ class MautrixController {
 		const receipts = []
 		for (const change of mutations) {
 			const target = change.type == "characterData" ? change.target.parentElement : change.target
-			if ( change.target.classList.contains("mdRGT07Read") &&
-				!change.target.classList.contains("MdNonDisp"))
+			if ( target.classList.contains("mdRGT07Read") &&
+				!target.classList.contains("MdNonDisp"))
 			{
-				const msgElement = change.target.closest(".mdRGT07Own")
+				const msgElement = target.closest(".mdRGT07Own")
 				if (msgElement) {
 					const id = +msgElement.getAttribute("data-local-id")
 					if (!ids.has(id)) {
 						ids.add(id)
 						receipts.push({
 							id: id,
-							count: this._getReceiptCount(change.target),
+							count: this._getReceiptCount(target),
 						})
 					}
 				}
@@ -674,10 +799,89 @@ class MautrixController {
 	}
 
 	/**
+	 * @typedef PendingMessage
+	 * @type object
+	 *
+	 * @property {Promise<MessageData>} promise
+	 * @property {Number} id
+	 */
+
+	/**
+	 * @typedef SameIDMsgs
+	 * @type object
+	 *
+	 * @property {Number} id
+	 * @property {PendingMessage[]} msgs
+	 * @property {Function} resolve
+	 * @property {Number} numRejected
+	 */
+
+	/**
+	 * Binary search for the array of messages with the provided ID.
+	 *
+	 * @param {SameIDMsgs[]} sortedSameIDMsgs
+	 * @param {Number} id
+	 * @param {boolean} returnClosest - If true, return the index of the nearest result on miss instead of -1.
+	 * @return {Number} The index of the matched element, or -1 if not found.
+	 */
+	_findMsgsForID(
+		sortedSameIDMsgs, id, returnClosest = false,
+		lowerBound = 0, upperBound = sortedSameIDMsgs.length - 1)
+	{
+		if (lowerBound > upperBound) {
+			return -1
+		}
+		if (returnClosest && lowerBound == upperBound) {
+			// Caller must check if the result has a matching ID or not
+			return sortedSameIDMsgs[lowerBound].id <= id ? lowerBound : lowerBound-1
+		}
+		const i = lowerBound + Math.floor((upperBound - lowerBound)/2)
+		const val = sortedSameIDMsgs[i]
+		if (val.id == id) {
+			return i
+		} else if (val.id < id) {
+			return this._findMsgsForID(
+				sortedSameIDMsgs, id, returnClosest,
+				i+1, upperBound)
+		} else {
+			return this._findMsgsForID(
+				sortedSameIDMsgs, id, returnClosest,
+				lowerBound, i-1)
+		}
+	}
+
+	/**
+	 * Insert the given message to the proper inner array.
+	 * In no inner array exists, insert a new one, preserving sort order.
+	 * Return the wrapper of which inner array was added to or created.
+	 *
+	 * @param {SameIDMsgs[]} sortedSameIDMsgs
+	 * @param {PendingMessage} msg
+	 * @return {SameIDMsgs}
+	 */
+	_insertMsgByID(sortedSameIDMsgs, msg) {
+		let i = this._findMsgsForID(sortedSameIDMsgs, msg.id, true)
+		if (i != -1 && sortedSameIDMsgs[i].id == msg.id) {
+			sortedSameIDMsgs[i].msgs.push(msg)
+			console.debug("UNLIKELY(?) EVENT -- Found two new message elements with the same ID, so tracking both of them")
+		} else {
+			sortedSameIDMsgs.splice(++i, 0, {
+				id: msg.id,
+				msgs: [msg],
+				numRejected: 0,
+				resolve: null,
+			})
+		}
+		return sortedSameIDMsgs[i]
+	}
+
+	/**
 	 * Add a mutation observer to the message list of the current chat.
 	 * Used for observing new messages & read receipts.
+	 *
+	 * @param {int} minID - The minimum message ID to consider.
 	 */
-	addMsgListObserver() {
+	addMsgListObserver(minID = 0) {
 		const chat_room_msg_list = document.querySelector("#_chat_room_msg_list")
 		if (!chat_room_msg_list) {
 			console.debug("Could not start msg list observer: no msg list available!")
@@ -688,34 +892,133 @@ class MautrixController {
 		const chatID = this.getCurrentChatID()
 		const chatType = this.getChatType(chatID)
 
-		let orderedPromises = [Promise.resolve()]
+		// NEED TO HANDLE:
+		// * message elements arriving in any order
+		// * messages being potentially pending (i.e. decrypting or loading),
+		//   and resolving in a potentially different order than they arrived in
+		// * pending messages potentially having multiple elements associated with
+		//   them, where only one of them resolves
+		// * message elements being added/removed any number of times, which may
+		//   or may not ever resolve
+		// * outgoing messages (i.e. sent by the bridge)
+		// And must send resolved messages to the bridge *in order*!
+		// BUT: Assuming that incoming messages will never be younger than a resolved one.
+
+		const sortedSameIDMsgs = []
+		const pendingMsgElements = new Set()
+
 		this.msgListObserver = new MutationObserver(changes => {
-			let msgList = []
+			console.debug(`MESSAGE LIST CHANGES: check since ${minID}`)
+			const remoteMsgs = []
 			for (const change of changes) {
-				change.addedNodes.forEach(child => {
-					if (child.tagName == "DIV" && child.hasAttribute("data-local-id")) {
-						msgList.push(child)
+				console.debug("---new change set---")
+				for (const child of change.addedNodes) {
+					if (!pendingMsgElements.has(child) &&
+						child.tagName == "DIV" &&
+						child.hasAttribute("data-local-id") &&
+						// Skip timestamps, as these are always current
+						child.classList.contains("MdRGT07Cont"))
+					{
+						const msgID = child.getAttribute("data-local-id")
+						if (msgID > minID) {
+							pendingMsgElements.add(child)
+
+							// TODO Maybe handle own messages somewhere else...?
+							const ownMsg = this._observeOwnMessage(child)
+							if (ownMsg) {
+								console.log("Found own bridge-sent message, will wait for it to resolve")
+								console.debug(child)
+								this.ownMsgPromise
+								.then(msgID => {
+									console.log("Resolved own bridge-sent message")
+									console.debug(ownMsg)
+									pendingMsgElements.delete(ownMsg)
+									if (minID < msgID) {
+										minID = msgID
+									}
+								})
+								.catch(() => {
+									console.log("Rejected own bridge-sent message")
+									console.debug(ownMsg)
+									pendingMsgElements.delete(ownMsg)
+								})
+							} else {
+								console.log("Found remote message")
+								console.debug(child)
+								remoteMsgs.push({
+									id: msgID,
+									element: child
+								})
+							}
+						}
 					}
-				})
+				}
+				// NOTE Ignoring removedNodes because an element can always be added back.
+				//      Will simply let permanently-removed nodes time out.
 			}
-			if (msgList.length == 0) {
+			if (remoteMsgs.length == 0) {
+				console.debug("Found no new remote messages")
 				return
 			}
-			msgList.sort((a,b) => a.getAttribute("data-local-id") - b.getAttribute("data-local-id"))
-			if (!this._observeOwnMessage(msgList)) {
-				let prevPromise = orderedPromises.shift()
-				orderedPromises.push(new Promise(resolve => prevPromise
-					.then(() => this._tryParseMessages(msgList, chatType))
-					.then(msgs => window.__mautrixReceiveMessages(chatID, msgs))
-					.then(() => resolve())
-				))
+
+			// No need to sort remoteMsgs, because sortedSameIDMsgs is enough
+			for (const msg of remoteMsgs) {
+				const messageElement = msg.element
+				const pendingMessage = {
+					id: msg.id,
+					promise: this._parseMessage(messageElement, chatType)
+				}
+				const sameIDMsgs = this._insertMsgByID(sortedSameIDMsgs, pendingMessage)
+
+				const handleMessage = async (messageData) => {
+					minID = messageData.id
+					sortedSameIDMsgs.shift()
+					await window.__mautrixReceiveMessages(chatID, [messageData])
+					if (sortedSameIDMsgs.length > 0 && sortedSameIDMsgs[0].resolve) {
+						console.debug("Allowing queued resolved message to be sent")
+						console.debug(sortedSameIDMsgs[0])
+						sortedSameIDMsgs[0].resolve()
+					}
+				}
+
+				pendingMessage.promise.then(
+				async (messageData) => {
+					const i = this._findMsgsForID(sortedSameIDMsgs, messageData.id)
+					if (i == -1) {
+						console.debug(`Got resolved message for already-handled ID ${messageData.id}, ignore it`)
+						pendingMsgElements.delete(messageElement)
+						return
+					}
+					if (i != 0) {
+						console.debug(`Got resolved message for later ID ${messageData.id}, wait for earlier messages`)
+						await new Promise(resolve => sameIDMsgs.resolve = resolve)
+						console.debug(`Message before ID ${messageData.id} finished, can now send this one`)
+					} else {
+						console.debug(`Got resolved message for earliest ID ${messageData.id}, send it`)
+					}
+					console.debug(messageElement)
+					pendingMsgElements.delete(messageElement)
+					handleMessage(messageData)
+				},
+				// error case
+				async (messageData) => {
+					console.debug("Message element rejected")
+					console.debug(messageElement)
+					pendingMsgElements.delete(messageElement)
+					if (++sameIDMsgs.numRejected == sameIDMsgs.msgs.length) {
+						// Note that if another message element with this ID somehow comes later, it'll be ignored.
+						console.debug(`All messages for ID ${sameIDMsgs.id} rejected, abandoning this ID and sending dummy message`)
+						// Choice of which message to send should be arbitrary
+						handleMessage(messageData)
+					}
+				})
 			}
 		})
 		this.msgListObserver.observe(
 			chat_room_msg_list,
 			{ childList: true })
 
-		console.debug("Started msg list observer")
+		console.debug(`Started msg list observer with minID = ${minID}`)
 
 
 		const observeReadReceipts = (
@@ -736,74 +1039,65 @@ class MautrixController {
 				subtree: true,
 				attributes: true,
 				attributeFilter: ["class"],
-				// TODO Consider using the same observer to watch for "ⓘ Decrypting..."
 				characterData: chatType != ChatTypeEnum.DIRECT,
 			})
 
 		console.debug("Started receipt observer")
 	}
 
-	_observeOwnMessage(msgList) {
-		if (!this.promiseOwnMsgSuccessSelector) {
+	_observeOwnMessage(ownMsg) {
+		if (!this.ownMsgPromise) {
 			// Not waiting for a pending sent message
-			return false
-		}
-		if (this.visibleSuccessObserver) {
-			// Already found a element that we're waiting on becoming visible
-			return true
+			return null
 		}
 
-		for (const ownMsg of msgList.filter(msg => msg.classList.contains("mdRGT07Own"))) {
-			const successElement =
-				ownMsg.querySelector(this.promiseOwnMsgSuccessSelector)
-			if (successElement) {
-				if (successElement.classList.contains("MdNonDisp")) {
-					console.log("Invisible success")
-					console.log(successElement)
-				} else {
-					console.debug("Already visible success, must not be it")
-					console.debug(successElement)
-					continue
-				}
+		const successElement =
+			ownMsg.querySelector(this.promiseOwnMsgSuccessSelector)
+		if (successElement) {
+			if (successElement.classList.contains("MdNonDisp")) {
+				console.log("Invisible success for own bridge-sent message, will wait for it to resolve")
+				console.log(successElement)
 			} else {
-				continue
+				console.debug("Already visible success, must not be it")
+				console.debug(successElement)
+				return null
 			}
-
-			const failureElement =
-				this.promiseOwnMsgFailureSelector &&
-				ownMsg.querySelector(this.promiseOwnMsgFailureSelector)
-			if (failureElement) {
-				if (failureElement.classList.contains("MdNonDisp")) {
-					console.log("Invisible failure")
-					console.log(failureElement)
-				} else {
-					console.debug("Already visible failure, must not be it")
-					console.log(failureElement)
-					continue
-				}
-			} else if (this.promiseOwnMsgFailureSelector) {
-				continue
-			}
-
-			console.log("Found invisible element, wait")
-			const msgID = +ownMsg.getAttribute("data-local-id")
-			this.visibleSuccessObserver = new MutationObserver(
-				this._getOwnVisibleCallback(msgID))
-			this.visibleSuccessObserver.observe(
-				successElement,
-				{ attributes: true, attributeFilter: ["class"] })
-
-			if (this.promiseOwnMsgFailureSelector) {
-				this.visibleFailureObserver = new MutationObserver(
-					this._getOwnVisibleCallback())
-				this.visibleFailureObserver.observe(
-					failureElement,
-					{ attributes: true, attributeFilter: ["class"] })
-			}
-
-			return true
+		} else {
+			return null
 		}
-		return false
+
+		const failureElement =
+			this.promiseOwnMsgFailureSelector &&
+			ownMsg.querySelector(this.promiseOwnMsgFailureSelector)
+		if (failureElement) {
+			if (failureElement.classList.contains("MdNonDisp")) {
+				console.log("Invisible failure for own bridge-sent message, will wait for it (or success) to resolve")
+				console.log(failureElement)
+			} else {
+				console.debug("Already visible failure, must not be it")
+				console.log(failureElement)
+				return null
+			}
+		} else if (this.promiseOwnMsgFailureSelector) {
+			return null
+		}
+
+		const msgID = +ownMsg.getAttribute("data-local-id")
+		this.visibleSuccessObserver = new MutationObserver(
+			this._getOwnVisibleCallback(msgID))
+		this.visibleSuccessObserver.observe(
+			successElement,
+			{ attributes: true, attributeFilter: ["class"] })
+
+		if (this.promiseOwnMsgFailureSelector) {
+			this.visibleFailureObserver = new MutationObserver(
+				this._getOwnVisibleCallback())
+			this.visibleFailureObserver.observe(
+				failureElement,
+				{ attributes: true, attributeFilter: ["class"] })
+		}
+
+		return ownMsg
 	}
 
 	_getOwnVisibleCallback(msgID=null) {
@@ -811,7 +1105,7 @@ class MautrixController {
 		return changes => {
 			for (const change of changes) {
 				if (!change.target.classList.contains("MdNonDisp")) {
-					console.log(`Waited for visible ${isSuccess ? "success" : "failure"}`)
+					console.log(`Resolved ${isSuccess ? "success" : "failure"} for own bridge-sent message`)
 					console.log(change.target)
 					isSuccess ? this._resolveOwnMessage(msgID) : this._rejectOwnMessage(change.target)
 					return
@@ -822,6 +1116,7 @@ class MautrixController {
 
 	_resolveOwnMessage(msgID) {
 		if (!this.promiseOwnMsgResolve) return
+		clearTimeout(this.promiseOwnMsgTimeoutID)
 		const resolve = this.promiseOwnMsgResolve
 		this._promiseOwnMsgReset()
 
@@ -838,10 +1133,12 @@ class MautrixController {
 	}
 
 	_promiseOwnMsgReset() {
+		this.ownMsgPromise = null
 		this.promiseOwnMsgSuccessSelector = null
 		this.promiseOwnMsgFailureSelector = null
 		this.promiseOwnMsgResolve = null
 		this.promiseOwnMsgReject = null
+		this.promiseOwnMsgTimeoutID = null
 
 		if (this.visibleSuccessObserver) {
 			this.visibleSuccessObserver.disconnect()

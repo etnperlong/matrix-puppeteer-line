@@ -48,9 +48,9 @@ except ImportError:
 
 StateBridge = EventType.find("m.bridge", EventType.Class.STATE)
 StateHalfShotBridge = EventType.find("uk.half-shot.bridge", EventType.Class.STATE)
-ReuploadedMediaInfo = NamedTuple('ReuploadedMediaInfo', mxc=Optional[ContentURI],
-                                 decryption_info=Optional[EncryptedFile],
-                                 mime_type=str, file_name=str, size=int)
+MediaInfo = NamedTuple('MediaInfo', mxc=Optional[ContentURI],
+                       decryption_info=Optional[EncryptedFile],
+                       mime_type=str, file_name=str, size=int)
 
 
 class Portal(DBPortal, BasePortal):
@@ -112,6 +112,7 @@ class Portal(DBPortal, BasePortal):
         cls.loop = bridge.loop
         cls.bridge = bridge
         cls.invite_own_puppet_to_pm = cls.config["bridge.invite_own_puppet_to_pm"]
+        cls.emoji_scale_factor = max(int(cls.config["bridge.emoji_scale_factor"]), 1)
         NotificationDisabler.puppet_cls = p.Puppet
         NotificationDisabler.config_enabled = cls.config["bridge.backfill.disable_notifications"]
 
@@ -228,15 +229,38 @@ class Portal(DBPortal, BasePortal):
             self.log.debug(f"Ignoring duplicate message {evt.id}")
             return
 
-        event_id = None
-        if evt.image_url:
-            # TODO Deduplicate stickers, but only if encryption is disabled
-            content = await self._handle_remote_photo(source, intent, evt)
-            if not content:
-                content = TextMessageEventContent(
-                    msgtype=MessageType.NOTICE,
-                    body="<unbridgeable media>")
-            event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
+        if evt.image and evt.image.url:
+            if not evt.image.is_sticker or self.config["bridge.receive_stickers"]:
+                media_info = await self._handle_remote_media(
+                    source, intent, evt.image.url,
+                    deduplicate=not self.encrypted and evt.image.is_sticker)
+                image_info = ImageInfo(
+                    # Element Web doesn't animate PNGs, but setting the mimetype to GIF works.
+                    # (PNG stickers never animate, and PNG images only animate after being clicked on.)
+                    # Making this exception since E.W. seems to be the only client that supports inline animated stickers & images.
+                    # TODO Open an E.W. issue for this
+                    # TODO Test Element Android
+                    # TODO Find & test other non-GIF formats for animated images
+                    mimetype="image/gif" if evt.image.is_animated and media_info.mime_type == "image/png" else media_info.mime_type,
+                    size=media_info.size) if media_info else None
+            else:
+                media_info = None
+            send_sticker = self.config["bridge.use_sticker_events"] and evt.image.is_sticker and not self.encrypted and media_info
+            if send_sticker:
+                event_id = await intent.send_sticker(
+                    self.mxid, media_info.mxc, image_info, "<sticker>", timestamp=evt.timestamp)
+            else:
+                if media_info:
+                    content = MediaMessageEventContent(
+                        url=media_info.mxc, file=media_info.decryption_info,
+                        msgtype=MessageType.IMAGE,
+                        body=media_info.file_name,
+                        info=image_info)
+                else:
+                    content = TextMessageEventContent(
+                        msgtype=MessageType.NOTICE,
+                        body=f"<{'sticker' if evt.image.is_sticker else 'image'}>")
+                event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         elif evt.html and not evt.html.isspace():
             chunks = []
 
@@ -267,6 +291,7 @@ class Portal(DBPortal, BasePortal):
                     if msg_html:
                         msg_html += chunk["data"]
                 elif ctype == "img":
+                    height = int(chunk.get("height", 19)) * self.emoji_scale_factor
                     cclass = chunk["class"]
                     if cclass == "emojione":
                         alt = chunk["alt"]
@@ -277,11 +302,11 @@ class Portal(DBPortal, BasePortal):
                         media_id = f'{chunk.get("data-stickon-pkg-cd", 0)}/{chunk.get("data-stickon-stk-cd", 0)}'
 
                     # NOTE Not encrypting content linked to by HTML tags
-                    if not self.encrypted:
-                        media_mxc = await self._get_mxc_for_remote_media(source, intent, chunk["src"], media_id)
+                    if not self.encrypted and self.config["bridge.receive_stickers"]:
+                        media_info = await self._handle_remote_media(source, intent, chunk["src"], media_id, deduplicate=True)
                         if not msg_html:
                             msg_html = msg_text
-                        msg_html += f'<img data-mx-emoticon src="{media_mxc}" alt="{alt}" title="{alt}" height="32">'
+                        msg_html += f'<img data-mx-emoticon src="{media_info.mxc}" alt="{alt}" title="{alt}" height="{height}">'
                     msg_text += alt
 
             content = TextMessageEventContent(
@@ -289,16 +314,21 @@ class Portal(DBPortal, BasePortal):
                 format=Format.HTML if msg_html else None,
                 body=msg_text, formatted_body=msg_html)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
-        if event_id:
-            if evt.is_outgoing and evt.receipt_count:
-                await self._handle_receipt(event_id, evt.receipt_count)
-            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
-            try:
-                await msg.insert()
-                await self._send_delivery_receipt(event_id)
-                self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
-            except UniqueViolationError as e:
-                self.log.debug(f"Failed to handle remote message {evt.id} -> {event_id}: {e}")
+        else:
+            content = TextMessageEventContent(
+                msgtype=MessageType.NOTICE,
+                body="<Unbridgeable message>")
+            event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
+
+        if evt.is_outgoing and evt.receipt_count:
+            await self._handle_receipt(event_id, evt.receipt_count)
+        msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
+        try:
+            await msg.insert()
+            await self._send_delivery_receipt(event_id)
+            self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
+        except UniqueViolationError as e:
+            self.log.debug(f"Failed to handle remote message {evt.id} -> {event_id}: {e}")
 
     async def handle_remote_receipt(self, receipt: Receipt) -> None:
         msg = await DBMessage.get_by_mid(receipt.id)
@@ -324,37 +354,34 @@ class Portal(DBPortal, BasePortal):
                 reaction_mxid = await self.main_intent.react(self.mxid, event_id, f"(Read by {receipt_count})")
                 await DBReceiptReaction(reaction_mxid, self.mxid, event_id, receipt_count).insert()
 
-    async def _handle_remote_photo(self, source: 'u.User', intent: IntentAPI, message: Message
-                                   ) -> Optional[MediaMessageEventContent]:
-        try:
-            resp = await source.client.read_image(message.image_url)
-        except (RPCError, TypeError) as e:
-            self.log.warning(f"Failed to download remote photo from chat {self.chat_id}: {e}")
-            return None
-        media_info = await self._reupload_remote_media(resp.data, intent, resp.mime)
-        return MediaMessageEventContent(url=media_info.mxc, file=media_info.decryption_info,
-                                        msgtype=MessageType.IMAGE, body=media_info.file_name,
-                                        info=ImageInfo(mimetype=media_info.mime_type, size=media_info.size))
-
-    async def _get_mxc_for_remote_media(self, source: 'u.User', intent: IntentAPI,
-                                        media_url: str, media_id: Optional[str] = None
-                                        ) -> ContentURI:
+    async def _handle_remote_media(self, source: 'u.User', intent: IntentAPI,
+                                        media_url: str, media_id: Optional[str] = None,
+                                        deduplicate: bool = False) -> MediaInfo:
         if not media_id:
             media_id = media_url
-        media_info = await DBMedia.get_by_id(media_id)
-        if not media_info:
-            self.log.debug(f"Did not find existing mxc URL for {media_id}, uploading media now")
-            resp = await source.client.read_image(media_url)
-            media_info = await self._reupload_remote_media(resp.data, intent, resp.mime, disable_encryption=True)
-            await DBMedia(media_id=media_id, mxc=media_info.mxc).insert()
-            self.log.debug(f"Uploaded media as {media_info.mxc}")
+        db_media_info = await DBMedia.get_by_id(media_id) if deduplicate else None
+        if not db_media_info:
+            # NOTE Blob URL of stickers only persists for a single session...still better than nothing.
+            self.log.debug(f"{'Did not find existing mxc URL for' if deduplicate else 'Not deduplicating'} {media_id}, uploading media now")
+            try:
+                resp = await source.client.read_image(media_url)
+            except (RPCError, TypeError) as e:
+                self.log.warning(f"Failed to download remote media from chat {self.chat_id}: {e}")
+                return None
+            media_info = await self._reupload_remote_media(resp.data, intent, resp.mime, disable_encryption=deduplicate)
+            if deduplicate:
+                await DBMedia(
+                    media_id=media_id, mxc=media_info.mxc,
+                    size=media_info.size, mime_type=media_info.mime_type, file_name=media_info.file_name
+                    ).insert()
+            return media_info
         else:
-            self.log.debug(f"Found existing mxc URL for {media_id}: {media_info.mxc}")
-        return media_info.mxc
+            self.log.debug(f"Found existing mxc URL for {media_id}: {db_media_info.mxc}")
+            return MediaInfo(db_media_info.mxc, None, db_media_info.mime_type, db_media_info.file_name, db_media_info.size)
 
     async def _reupload_remote_media(self, data: bytes, intent: IntentAPI,
                                      mime_type: str = None, file_name: str = None,
-                                     disable_encryption: bool = True) -> ReuploadedMediaInfo:
+                                     disable_encryption: bool = True) -> MediaInfo:
         if not mime_type:
             mime_type = magic.from_buffer(data, mime=True)
         upload_mime_type = mime_type
@@ -372,10 +399,13 @@ class Portal(DBPortal, BasePortal):
                                         filename=upload_file_name)
 
         if decryption_info:
+            self.log.debug(f"Uploaded encrypted media as {mxc}")
             decryption_info.url = mxc
             mxc = None
+        else:
+            self.log.debug(f"Uploaded media as {mxc}")
 
-        return ReuploadedMediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
+        return MediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
 
     async def update_info(self, conv: ChatInfo, client: Optional[Client]) -> None:
         if self.is_direct:

@@ -73,6 +73,9 @@ class Config(BaseBridgeConfig):
         copy("bridge.delivery_receipts")
         copy("bridge.delivery_error_reports")
         copy("bridge.resend_bridge_info")
+        copy("bridge.receive_stickers")
+        copy("bridge.use_sticker_events")
+        copy("bridge.emoji_scale_factor")
         copy("bridge.command_prefix")
         copy("bridge.user")
 

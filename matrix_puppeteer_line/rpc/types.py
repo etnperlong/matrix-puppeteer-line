@@ -52,6 +52,13 @@ class ChatInfo(ChatListInfo, SerializableAttrs['ChatInfo']):
 
 
 @dataclass
+class MessageImage(SerializableAttrs['MessageImage']):
+    url: str
+    is_sticker: bool
+    is_animated: bool
+
+
+@dataclass
 class Message(SerializableAttrs['Message']):
     id: int
     chat_id: int
@@ -59,7 +66,7 @@ class Message(SerializableAttrs['Message']):
     sender: Optional[Participant]
     timestamp: int = None
     html: Optional[str] = None
-    image_url: Optional[str] = None
+    image: Optional[MessageImage] = None
     receipt_count: Optional[int] = None
 
 

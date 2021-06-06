@@ -107,7 +107,6 @@ export default class MessagesPuppeteer {
 			this._receiveReceiptDirectLatest.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveReceiptMulti",
 			this._receiveReceiptMulti.bind(this))
-		await this.page.exposeFunction("__mautrixShowParticipantsList", this._showParticipantList.bind(this))
 		await this.page.exposeFunction("__chronoParseDate", chrono.parseDate)
 
 		// NOTE Must *always* re-login on a browser session, so no need to check if already logged in
@@ -376,15 +375,7 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
 	 */
 	async getMessages(chatID) {
-		return await this.taskQueue.push(async () => {
-			const messages = await this._getMessagesUnsafe(chatID)
-			if (messages.length > 0) {
-				for (const message of messages) {
-					message.chat_id = chatID
-				}
-			}
-			return messages
-		})
+		return await this.taskQueue.push(async () => this._getMessagesUnsafe(chatID))
 	}
 
 	setLastMessageIDs(ids) {
@@ -392,7 +383,8 @@ export default class MessagesPuppeteer {
 		for (const [chatID, messageID] of Object.entries(ids)) {
 			this.mostRecentMessages.set(chatID, messageID)
 		}
-		this.log("Updated most recent message ID map:", this.mostRecentMessages)
+		this.log("Updated most recent message ID map:")
+		this.log(this.mostRecentMessages)
 	}
 
 	async readImage(imageUrl) {
@@ -407,11 +399,15 @@ export default class MessagesPuppeteer {
 	}
 
 	async startObserving() {
-		this.log("Adding observers")
+		const chatID = await this.page.evaluate(() => window.__mautrixController.getCurrentChatID())
+		this.log(`Adding observers for ${chatID || "empty chat"}`)
 		await this.page.evaluate(
 			() => window.__mautrixController.addChatListObserver())
-		await this.page.evaluate(
-			() => window.__mautrixController.addMsgListObserver())
+		if (chatID) {
+			await this.page.evaluate(
+				(mostRecentMessage) => window.__mautrixController.addMsgListObserver(mostRecentMessage),
+				this.mostRecentMessages.get(chatID))
+		}
 	}
 
 	async stopObserving() {
@@ -444,9 +440,10 @@ export default class MessagesPuppeteer {
 		if (await this.page.evaluate(isCorrectChatVisible, chatName)) {
 			this.log("Already viewing chat, no need to switch")
 		} else {
-			this.log("Switching chat, so remove msg list observer")
+			this.log("Ensuring msg list observer is removed")
 			const hadMsgListObserver = await this.page.evaluate(
 				() => window.__mautrixController.removeMsgListObserver())
+			this.log(hadMsgListObserver ? "Observer was already removed" : "Removed observer")
 
 			await chatListItem.click()
 			this.log(`Waiting for chat header title to be "${chatName}"`)
@@ -455,36 +452,25 @@ export default class MessagesPuppeteer {
 				{polling: "mutation"},
 				chatName)
 
-			// For consistent behaviour later, wait for the chat details sidebar to be hidden
+			// Always show the chat details sidebar, as this makes life easier
+			this.log("Waiting for detail area to be auto-hidden upon entering chat")
 			await this.page.waitForFunction(
 				detailArea => detailArea.childElementCount == 0,
 				{},
 				await this.page.$("#_chat_detail_area"))
+			this.log("Clicking chat header to show detail area")
+			await this.page.click("#_chat_header_area > .mdRGT04Link")
+			this.log("Waiting for detail area")
+			await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 
 			if (hadMsgListObserver) {
 				this.log("Restoring msg list observer")
 				await this.page.evaluate(
-					() => window.__mautrixController.addMsgListObserver())
+					(mostRecentMessage) => window.__mautrixController.addMsgListObserver(mostRecentMessage),
+					this.mostRecentMessages.get(chatID))
 			} else {
 				this.log("Not restoring msg list observer, as there never was one")
 			}
-		}
-	}
-
-	// TODO Commonize
-	async _getParticipantList() {
-		await this._showParticipantList()
-		return await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
-	}
-
-	async _showParticipantList() {
-		const selector = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
-		let participantList = await this.page.$(selector)
-		if (!participantList) {
-			this.log("Participant list hidden, so clicking chat header to show it")
-			await this.page.click("#_chat_header_area > .mdRGT04Link")
-			// Use no timeout since the browser itself is using this
-			await this.page.waitForSelector(selector, {timeout: 0})
 		}
 	}
 
@@ -512,7 +498,7 @@ export default class MessagesPuppeteer {
 			this.log("Found multi-user chat, so clicking chat header to get participants")
 			// TODO This will mark the chat as "read"!
 			await this._switchChat(chatID)
-			const participantList = await this._getParticipantList()
+			const participantList = await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
 			// TODO Is a group not actually created until a message is sent(?)
 			// 		If so, maybe don't create a portal until there is a message.
 			participants = await participantList.evaluate(
@@ -542,6 +528,7 @@ export default class MessagesPuppeteer {
 
 	async _sendMessageUnsafe(chatID, text) {
 		await this._switchChat(chatID)
+		// TODO Initiate the promise in the content script
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
 
@@ -593,15 +580,12 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	_receiveMessages(chatID, messages) {
+	async _receiveMessages(chatID, messages) {
 		if (this.client) {
-			messages = this._filterMessages(chatID, messages)
-			if (messages.length > 0) {
-				for (const message of messages) {
-					message.chat_id = chatID
-					this.client.sendMessage(message).catch(err =>
-						this.error("Failed to send message", message.id, "to client:", err))
-				}
+			messages = await this._processMessages(chatID, messages)
+			for (const message of messages) {
+				this.client.sendMessage(message).catch(err =>
+					this.error("Failed to send message", message.id, "to client:", err))
 			}
 		} else {
 			this.log("No client connected, not sending messages")
@@ -609,27 +593,52 @@ export default class MessagesPuppeteer {
 	}
 
 	async _getMessagesUnsafe(chatID) {
-		// TODO Also handle "decrypting" state
+		// TODO Consider making a wrapper for pausing/resuming the msg list observers
+		this.log("Ensuring msg list observer is removed")
+		const hadMsgListObserver = await this.page.evaluate(
+			() => window.__mautrixController.removeMsgListObserver())
+		this.log(hadMsgListObserver ? "Observer was already removed" : "Removed observer")
+
 		// TODO Handle unloaded messages. Maybe scroll up
 		// TODO This will mark the chat as "read"!
 		await this._switchChat(chatID)
-		const messages = await this.page.evaluate(() =>
-			window.__mautrixController.parseMessageList())
-		return this._filterMessages(chatID, messages)
+		const messages = await this.page.evaluate(
+			mostRecentMessage => window.__mautrixController.parseMessageList(mostRecentMessage),
+			this.mostRecentMessages.get(chatID))
+		// Doing this before restoring the observer since it updates minID
+		const filteredMessages = await this._processMessages(chatID, messages)
+
+		if (hadMsgListObserver) {
+			this.log("Restoring msg list observer")
+			await this.page.evaluate(
+				mostRecentMessage => window.__mautrixController.addMsgListObserver(mostRecentMessage),
+				this.mostRecentMessages.get(chatID))
+		} else {
+			this.log("Not restoring msg list observer, as there never was one")
+		}
+
+		return filteredMessages
 	}
 
-	_filterMessages(chatID, messages) {
+	async _processMessages(chatID, messages) {
+		// TODO Probably don't need minID filtering if Puppeteer context handles it now
 		const minID = this.mostRecentMessages.get(chatID) || 0
-		const filtered_messages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+		const filteredMessages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
 
-		if (filtered_messages.length > 0) {
-			const newFirstID = filtered_messages[0].id
-			const newLastID = filtered_messages[filtered_messages.length - 1].id
+		if (filteredMessages.length > 0) {
+			const newFirstID = filteredMessages[0].id
+			const newLastID = filteredMessages[filteredMessages.length - 1].id
 			this.mostRecentMessages.set(chatID, newLastID)
 			const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
-			this.log(`Loaded ${messages.length} messages in ${chatID}, got ${filtered_messages.length} newer than ${minID} (${range})`)
+			this.log(`Loaded ${messages.length} messages in ${chatID}, got ${filteredMessages.length} newer than ${minID} (${range})`)
+
+			for (const message of filteredMessages) {
+				message.chat_id = chatID
+			}
+			return filteredMessages
+		} else {
+			return []
 		}
-		return filtered_messages
 	}
 
 	async _processChatListChangeUnsafe(chatID) {
@@ -643,7 +652,6 @@ export default class MessagesPuppeteer {
 
 		if (this.client) {
 			for (const message of messages) {
-				message.chat_id = chatID
 				await this.client.sendMessage(message).catch(err =>
 					this.error("Failed to send message", message.id, "to client:", err))
 			}

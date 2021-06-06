@@ -131,6 +131,12 @@ bridge:
     # This field will automatically be changed back to false after it,
     # except if the config file is not writable.
     resend_bridge_info: false
+    # Set this to false to disable bridging stickers and emoji.
+    receive_stickers: true
+    # Set this to false to use m.image events for stickers instead of m.sticker.
+    use_sticker_events: true
+    # The scale by which to display emojis with. Must be a positive integer.
+    emoji_scale_factor: 1
 
     # The prefix for commands. Only required in non-management rooms.
     command_prefix: "!line"

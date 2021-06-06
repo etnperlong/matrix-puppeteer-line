@@ -104,3 +104,12 @@ async def upgrade_read_receipts(conn: Connection) -> None:
             REFERENCES portal (mxid)
             ON DELETE CASCADE
     )""")
+
+
+@upgrade_table.register(description="Media metadata")
+async def upgrade_deduplicate_blob(conn: Connection) -> None:
+    await conn.execute("""ALTER TABLE media
+       ADD COLUMN IF NOT EXISTS mime_type  TEXT,
+       ADD COLUMN IF NOT EXISTS file_name  TEXT,
+       ADD COLUMN IF NOT EXISTS size       INTEGER
+   """)
