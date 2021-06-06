@@ -64,8 +64,9 @@ class User(DBUser, BaseUser):
         cls.loop = bridge.loop
         Client.config = bridge.config
 
-    async def send_notice(self, text) -> None:
+    async def send_bridge_notice(self, text) -> None:
         if self.notice_room:
+            self.log.debug(f"Sending bridge notice: {text}")
             await self.az.intent.send_notice(self.notice_room, text)
 
     async def is_logged_in(self) -> bool:
@@ -96,17 +97,17 @@ class User(DBUser, BaseUser):
         self.loop.create_task(self.connect_double_puppet())
         self.client = Client(self.mxid)
         self.log.debug("Starting client")
-        await self.send_notice("Starting up...")
+        await self.send_bridge_notice("Starting up...")
         state = await self.client.start()
         await self.client.on_message(self.handle_message)
         await self.client.on_receipt(self.handle_receipt)
         if state.is_connected:
             self._track_metric(METRIC_CONNECTED, True)
         if state.is_logged_in:
-            await self.send_notice("Already logged in to LINE")
+            await self.send_bridge_notice("Already logged in to LINE")
             self.loop.create_task(self._try_sync())
         else:
-            await self.send_notice("Ready to log in to LINE")
+            await self.send_bridge_notice("Ready to log in to LINE")
 
     async def _try_sync(self) -> None:
         try:

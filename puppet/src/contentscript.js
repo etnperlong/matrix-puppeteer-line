@@ -34,13 +34,13 @@ window.__mautrixReceiveChanges = function (changes) {}
  */
 window.__mautrixReceiveMessages = function (chatID, messages) {}
 /**
- * @param {str} chatID - The ID of the chat whose receipts are being processed.
- * @param {str} receipt_id - The ID of the most recently-read message for the current chat.
+ * @param {string} chatID - The ID of the chat whose receipts are being processed.
+ * @param {string} receipt_id - The ID of the most recently-read message for the current chat.
  * @return {Promise<void>}
  */
-window.__mautrixReceiveReceiptDirectLatest = function (chat_id, receipt_id) {}
+window.__mautrixReceiveReceiptDirectLatest = function (chatID, receipt_id) {}
 /**
- * @param {str} chatID - The ID of the chat whose receipts are being processed.
+ * @param {string} chatID - The ID of the chat whose receipts are being processed.
  * @param {[Receipt]} receipts - All newly-seen receipts for the current chat.
  * @return {Promise<void>}
  */
@@ -162,7 +162,7 @@ class MautrixController {
 	 * Try to match a user against an entry in the friends list to get their ID.
 	 *
 	 * @param {Element} element - The display name of the user to find the ID for.
-	 * @return {?str}           - The user's ID if found.
+	 * @return {?string}        - The user's ID if found.
 	 */
 	getUserIdFromFriendsList(senderName) {
 		return document.querySelector(`#contact_wrap_friends > ul > li[title='${senderName}']`)?.getAttribute("data-mid")

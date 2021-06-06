@@ -29,14 +29,14 @@ from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, Mess
                            TextMessageEventContent, MediaMessageEventContent, Membership, Format,
                            ContentURI, EncryptedFile, ImageInfo,
                            RelatesTo, RelationType)
-from mautrix.errors import IntentError, MatrixError
+from mautrix.errors import IntentError
 from mautrix.util.simple_lock import SimpleLock
 
 from .db import Portal as DBPortal, Message as DBMessage, ReceiptReaction as DBReceiptReaction, Media as DBMedia
 from .config import Config
 from .rpc import ChatInfo, Participant, Message, Receipt, Client, PathImage
 from .rpc.types import RPCError
-from . import user as u, puppet as p, matrix as m
+from . import user as u, puppet as p
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
@@ -170,7 +170,7 @@ class Portal(DBPortal, BasePortal):
                 self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
             except UniqueViolationError as e:
                 self.log.warning(f"Failed to handle Matrix message {event_id} -> {message_id}: {e}")
-        if not msg:
+        if not msg and self.config["bridge.delivery_error_reports"]:
             await self.main_intent.send_notice(
                 self.mxid,
                "Posting this message to LINE may have failed.",
@@ -179,12 +179,6 @@ class Portal(DBPortal, BasePortal):
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
                       f"cleaning up and deleting...")
-        if self.invite_own_puppet_to_pm:
-            # TODO Use own puppet instead of bridge bot. Then cleanup_and_delete will handle it
-            try:
-                await self.az.intent.leave_room(self.mxid)
-            except MatrixError:
-                pass
         await self.cleanup_and_delete()
 
     async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
