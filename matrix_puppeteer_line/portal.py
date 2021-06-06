@@ -269,12 +269,11 @@ class Portal(DBPortal, BasePortal):
                 chunks.append({"type": "data", "data": data})
 
             def handle_starttag(tag, attrs):
-                if tag == "img":
-                    obj = {"type": tag}
-                    for attr in attrs:
-                        obj[attr[0]] = attr[1]
-                    nonlocal chunks
-                    chunks.append(obj)
+                obj = {"type": tag}
+                for attr in attrs:
+                    obj[attr[0]] = attr[1]
+                nonlocal chunks
+                chunks.append(obj)
 
             parser = HTMLParser()
             parser.handle_data = handle_data
@@ -286,7 +285,12 @@ class Portal(DBPortal, BasePortal):
 
             for chunk in chunks:
                 ctype = chunk["type"]
-                if ctype == "data":
+                if ctype == "br":
+                    msg_text += "\n"
+                    if not msg_html:
+                        msg_html = msg_text
+                    msg_html += "<br>"
+                elif ctype == "data":
                     msg_text += chunk["data"]
                     if msg_html:
                         msg_html += chunk["data"]
