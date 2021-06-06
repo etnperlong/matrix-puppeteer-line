@@ -124,22 +124,24 @@ class User(DBUser, BaseUser):
         if self._connection_check_task:
             self._connection_check_task.cancel()
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
-        await self.client.set_last_message_ids(await DBMessage.get_max_mids())
-        self.log.info("Syncing chats")
-        await self.send_notice("Synchronizing chats...")
         await self.client.pause()
-        chats = await self.client.get_chats()
+        await self.client.set_last_message_ids(await DBMessage.get_max_mids())
         limit = self.config["bridge.initial_conversation_sync"]
+        self.log.info("Syncing chats")
+        await self.send_bridge_notice("Synchronizing chats...")
+        chats = await self.client.get_chats()
+        num_created = 0
         for index, chat in enumerate(chats):
             portal = await po.Portal.get_by_chat_id(chat.id, create=True)
-            if portal.mxid or index < limit:
+            if portal.mxid or num_created < limit:
                 chat = await self.client.get_chat(chat.id)
                 if portal.mxid:
                     await portal.update_matrix_room(self, chat)
                 else:
                     await portal.create_matrix_room(self, chat)
+                    num_created += 1
+        await self.send_bridge_notice("Synchronization complete")
         await self.client.resume()
-        await self.send_notice("Synchronization complete")
 
     async def stop(self) -> None:
         # TODO Notices for shutdown messages

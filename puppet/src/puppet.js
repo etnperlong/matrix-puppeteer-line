@@ -247,7 +247,16 @@ export default class MessagesPuppeteer {
 		}
 
 		this.loginRunning = false
-		await this.startObserving()
+		// Don't start observing yet, instead wait for explicit request.
+		// But at least view the most recent chat.
+		try {
+			let mostRecentChatID = await this.page.$eval("#_chat_list_body li",
+				element => window.getChatListItemID(element))
+			await this._switchChat(mostRecentChatID)
+			this.log("Focused on most recent chat")
+		} catch (e) {
+			this.log("No chats available to focus on")
+		}
 		this.log("Login complete")
 	}
 
