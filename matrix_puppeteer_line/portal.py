@@ -349,9 +349,10 @@ class Portal(DBPortal, BasePortal):
             if reaction:
                 await self.main_intent.redact(self.mxid, reaction.mxid)
                 await reaction.delete()
+            # TODO Not just -1 if there are multiple _OWN_ puppets...
             if receipt_count == len(self._last_participant_update) - 1:
-                for participant in self._last_participant_update:
-                    puppet = await p.Puppet.get_by_mid(participant.id)
+                for participant in filter(lambda participant: not p.Puppet.is_mid_for_own_puppet(participant), self._last_participant_update):
+                    puppet = await p.Puppet.get_by_mid(participant)
                     await puppet.intent.send_receipt(self.mxid, event_id)
             else:
                 # TODO Translatable string for "Read by"
@@ -477,10 +478,10 @@ class Portal(DBPortal, BasePortal):
 
         # Make sure puppets who should be here are here
         for participant in participants:
-            puppet = await p.Puppet.get_by_mid(participant.id)
             if forbid_own_puppets and p.Puppet.is_mid_for_own_puppet(participant.id):
                 continue
-            await puppet.intent.ensure_joined(self.mxid)
+            intent = (await p.Puppet.get_by_mid(participant.id)).intent
+            await intent.ensure_joined(self.mxid)
 
         print(current_members)
 
