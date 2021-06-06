@@ -97,7 +97,6 @@ export default class MessagesPuppeteer {
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
 		await this.page.exposeFunction("__mautrixSendEmailCredentials", this._sendEmailCredentials.bind(this))
 		await this.page.exposeFunction("__mautrixReceivePIN", this._receivePIN.bind(this))
-		await this.page.exposeFunction("__mautrixExpiry", this._receiveExpiry.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveMessageID",
 			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
@@ -183,8 +182,6 @@ export default class MessagesPuppeteer {
 
 		await this.page.evaluate(
 			element => window.__mautrixController.addPINAppearObserver(element), loginContentArea)
-		await this.page.$eval("#layer_contents",
-			element => window.__mautrixController.addExpiryObserver(element))
 
 		this.log("Waiting for login response")
 		let doneWaiting = false
@@ -226,7 +223,6 @@ export default class MessagesPuppeteer {
 		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removePINAppearObserver())
-		await this.page.evaluate(() => window.__mautrixController.removeExpiryObserver())
 		delete this.login_email
 		delete this.login_password
 
@@ -738,11 +734,5 @@ export default class MessagesPuppeteer {
 		} else {
 			this.log("No client connected, not sending failure reason")
 		}
-	}
-
-	async _receiveExpiry(button) {
-		this.log("Something expired, clicking OK button to continue")
-		this.page.click(button).catch(err =>
-			this.error("Failed to dismiss expiry dialog:", err))
 	}
 }

@@ -90,7 +90,6 @@ class MautrixController {
 		this.qrAppearObserver = null
 		this.emailAppearObserver = null
 		this.pinAppearObserver = null
-		this.expiryObserver = null
 		this.ownID = null
 
 		this.ownMsgPromise = Promise.resolve(-1)
@@ -968,26 +967,25 @@ class MautrixController {
 		}
 	}
 
-	addExpiryObserver(element) {
-		this.removeExpiryObserver()
-		const button = element.querySelector("dialog button")
-		this.expiryObserver = new MutationObserver(changes => {
-			if (changes.length == 1 && !changes[0].target.classList.contains("MdNonDisp")) {
-				window.__mautrixExpiry(button)
-			}
-		})
-		this.expiryObserver.observe(element, {
-			attributes: true,
-			attributeFilter: ["class"],
-		})
-	}
-
-	removeExpiryObserver() {
-		if (this.expiryObserver !== null) {
-			this.expiryObserver.disconnect()
-			this.expiryObserver = null
-		}
-	}
 }
 
 window.__mautrixController = new MautrixController()
+
+/**
+ * Watch for an error dialog / PIN expiry dialog to appear, and click its "OK" button.
+ * Must watch for both its parent appearing & it being added to its parent in the first place.
+ */
+const layer = document.querySelector("#layer_contents")
+new MutationObserver(() => {
+	if (!layer.classList.contains("MdNonDisp")) {
+		const button = layer.querySelector("dialog button")
+		if (button) {
+			console.log("Something expired, clicking OK button to continue")
+			button.click()
+		}
+	}
+}).observe(layer, {
+	attributes: true,
+	attributeFilter: ["class"],
+	childList: true,
+})
