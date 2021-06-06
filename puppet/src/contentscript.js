@@ -136,17 +136,18 @@ class MautrixController {
 	}
 
 	/**
-	 * Parse a date separator (mws-relative-timestamp)
+	 * Parse a date separator.
 	 *
-	 * @param {string} text - The text in the mws-relative-timestamp element.
-	 * @return {?Date} - The value in the date separator.
+	 * @param {string} text - The text in the date saparator.
+	 * @return {Promise<?Date>} - The value of the date separator.
 	 * @private
 	 */
-	async _tryParseDayDate(text) {
+	async _tryParseDateSeparator(text) {
 		if (!text) {
 			return null
 		}
-		text = text.replace(/\. /, "/")
+		// Must prefix with midnight to prevent getting noon
+		text = "00:00 " + text.replace(/\. /, "/")
 		const now = new Date()
 		let newDate = await this._tryParseDate(text)
 		if (!newDate || newDate > now) {
@@ -345,7 +346,7 @@ class MautrixController {
 		let refDate = null
 		for (const child of msgList) {
 			if (child.classList.contains("mdRGT10Date")) {
-				refDate = await this._tryParseDayDate(child.firstElementChild.innerText)
+				refDate = await this._tryParseDateSeparator(child.firstElementChild.innerText)
 			} else if (child.classList.contains("MdRGT07Cont")) {
 				// TODO :not(.MdNonDisp) to exclude not-yet-posted messages,
 				// 		but that is unlikely to be a problem here.
