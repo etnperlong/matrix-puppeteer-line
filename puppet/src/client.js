@@ -135,11 +135,19 @@ export default class Client {
 		})
 	}
 
-	sendFailure(reason) {
-		this.log(`Sending failure to client${reason ? `: "${reason}"` : ""}`)
+	sendLoginSuccess() {
+		this.log("Sending login success to client")
 		return this._write({
 			id: --this.notificationID,
-			command: "failure",
+			command: "login_success",
+		})
+	}
+
+	sendLoginFailure(reason) {
+		this.log(`Sending login failure to client${reason ? `: "${reason}"` : ""}`)
+		return this._write({
+			id: --this.notificationID,
+			command: "login_failure",
 			reason,
 		})
 	}

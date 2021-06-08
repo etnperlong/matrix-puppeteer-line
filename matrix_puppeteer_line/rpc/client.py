@@ -119,8 +119,12 @@ class Client(RPCClient):
             data.append(("pin", req["pin"]))
             event.set()
 
+        async def success_handler(req: LoginCommand) -> None:
+            data.append(("login_success", None))
+            event.set()
+
         async def failure_handler(req: LoginCommand) -> None:
-            data.append(("failure", req.get("reason")))
+            data.append(("login_failure", req.get("reason")))
             event.set()
 
         async def cancel_watcher() -> None:
@@ -145,7 +149,8 @@ class Client(RPCClient):
 
         self.add_event_handler("qr", qr_handler)
         self.add_event_handler("pin", pin_handler)
-        self.add_event_handler("failure", failure_handler)
+        self.add_event_handler("login_success", success_handler)
+        self.add_event_handler("login_failure", failure_handler)
         try:
             while True:
                 await event.wait()
@@ -158,4 +163,5 @@ class Client(RPCClient):
         finally:
             self.remove_event_handler("qr", qr_handler)
             self.remove_event_handler("pin", pin_handler)
-            self.remove_event_handler("failure", failure_handler)
+            self.remove_event_handler("login_success", success_handler)
+            self.remove_event_handler("login_failure", failure_handler)

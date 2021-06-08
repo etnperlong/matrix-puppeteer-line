@@ -55,6 +55,11 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
     failure = False
     async for item in gen:
         if item[0] == "qr":
+            message = "Open LINE on your primary device and scan this QR code:"
+            content = TextMessageEventContent(body=message, msgtype=MessageType.NOTICE)
+            content.set_reply(evt.event_id)
+            await evt.az.intent.send_message(evt.room_id, content)
+
             url = item[1]
             buffer = io.BytesIO()
             image = qrcode.make(url)
@@ -69,7 +74,6 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
                 content.set_edit(qr_event_id)
                 await evt.az.intent.send_message(evt.room_id, content)
             else:
-                content.set_reply(evt.event_id)
                 qr_event_id = await evt.az.intent.send_message(evt.room_id, content)
         elif item[0] == "pin":
             pin = item[1]
@@ -79,9 +83,10 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
                 content.set_edit(pin_event_id)
                 await evt.az.intent.send_message(evt.room_id, content)
             else:
-                content.set_reply(evt.event_id)
                 pin_event_id = await evt.az.intent.send_message(evt.room_id, content)
-        elif item[0] in ("failure", "error"):
+        elif item[0] == "login_success":
+            await evt.reply("Successfully logged in, waiting for LINE to load...")
+        elif item[0] in ("login_failure", "error"):
             # TODO Handle errors differently?
             failure = True
             reason = item[1]
@@ -91,7 +96,7 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
         # else: pass
 
     if not failure and evt.sender.command_status:
-        await evt.reply("Successfully logged in")
+        await evt.reply("LINE loading complete")
         await evt.sender.sync()
     # else command was cancelled or failed. Don't post message about it, "cancel" command or failure did already
     evt.sender.command_status = None

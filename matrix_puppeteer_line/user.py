@@ -177,7 +177,7 @@ class User(DBUser, BaseUser):
         await portal.handle_remote_receipt(receipt)
 
     async def handle_logged_out(self) -> None:
-        await self.send_bridge_notice("Logged out of LINE. Please run the \"login\" command to log back in.")
+        await self.send_bridge_notice("Logged out of LINE. Please run either \"login-qr\" or \"login-email\" to log back in.")
         if self._connection_check_task:
             self._connection_check_task.cancel()
             self._connection_check_task = None

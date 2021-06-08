@@ -207,7 +207,7 @@ export default class MessagesPuppeteer {
 		}
 
 		const result = await Promise.race([
-			() => this.page.waitForSelector("#wrap_message_sync", {timeout: 2000})
+			() => this.page.waitForSelector("#mainApp:not(.MdNonDisp)", {timeout: 2000})
 				.then(value => {
 					loginSuccess = true
 					return value
@@ -227,11 +227,13 @@ export default class MessagesPuppeteer {
 		delete this.login_email
 		delete this.login_password
 
-		if (!loginSuccess) {
+		const messageSyncElement = loginSuccess ? await this.page.waitForSelector("#wrap_message_sync") : null
+		if (!loginSuccess || !messageSyncElement) {
 			this._sendLoginFailure(result)
 			return
 		}
 
+		this._sendLoginSuccess()
 		this.log("Waiting for sync")
 		try {
 			await this.page.waitForFunction(
@@ -242,14 +244,12 @@ export default class MessagesPuppeteer {
 						// TODO Sometimes it gets stuck at 99%...??
 				},
 				{timeout: 10000}, // Assume 10 seconds is long enough
-				result)
+				messageSyncElement)
 		} catch (err) {
 			//this._sendLoginFailure(`Failed to sync: ${err}`)
 			this.log("LINE's sync took too long, assume it's fine and carry on...")
 		} finally {
-			const syncText = await this.page.evaluate(
-				messageSyncElement => messageSyncElement.innerText,
-				result)
+			const syncText = await messageSyncElement.evaluate(e => e.innerText)
 			this.log(`Final sync text is: "${syncText}"`)
 		}
 
@@ -758,14 +758,24 @@ export default class MessagesPuppeteer {
 		}
 	}
 
+	_sendLoginSuccess() {
+		this.error("Login success")
+		if (this.client) {
+			this.client.sendLoginSuccess().catch(err =>
+				this.error("Failed to send login success to client:", err))
+		} else {
+			this.log("No client connected, not sending login success")
+		}
+	}
+
 	_sendLoginFailure(reason) {
 		this.loginRunning = false
 		this.error(`Login failure: ${reason ? reason : "cancelled"}`)
 		if (this.client) {
-			this.client.sendFailure(reason).catch(err =>
-				this.error("Failed to send failure reason to client:", err))
+			this.client.sendLoginFailure(reason).catch(err =>
+				this.error("Failed to send login failure to client:", err))
 		} else {
-			this.log("No client connected, not sending failure reason")
+			this.log("No client connected, not sending login failure")
 		}
 	}
 
