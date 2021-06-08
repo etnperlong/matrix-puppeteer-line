@@ -2,7 +2,7 @@
 A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer.
 Fork of [https://mau.dev/tulir/mautrix-amp/](mautrix-amp).
 
-## Features & roadmap
+## Features, roadmap, and limitations
 [ROADMAP.md](ROADMAP.md)
 
 ## Setup

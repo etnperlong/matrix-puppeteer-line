@@ -6,11 +6,13 @@
     * [x] Images
     * [ ] Files
     * [x] Stickers
-  * [x] Notification for message send failure
   * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
   * [ ] Room metadata changes
     * [ ] Name
     * [ ] Avatar
+  * [ ] Member events
+    * [ ] Invite
+    * [ ] Kick
 * LINE → Matrix
   * [ ] Message content
     * [x] Text
@@ -20,45 +22,54 @@
     * [ ] Location
     * [ ] Videos
     * [x] Stickers
-    * [x] Sticons
-      * [x] Single
-      * [x] Multiple or mixed with text
-    * [x] EmojiOne
+    * [x] Emoji
   * [ ] Message unsend
   * [ ] Read receipts
     * [x] For most recently active chat
     * [ ] For any chat
   * [x] User metadata
     * [ ] Name
-      * [x] On initial sync
+      * [x] On sync
       * [ ] On change
     * [ ] Avatar
-      * [x] On initial sync
+      * [x] On sync
       * [ ] On change
   * [ ] Chat metadata
     * [ ] Name
-      * [x] On initial sync
+      * [x] On sync
       * [ ] On change
     * [ ] Icon
-      * [x] On initial sync
+      * [x] On sync
       * [ ] On change
-  * [x] Message history
+  * [ ] Message history
     * [x] When creating portal
     * [x] Missed messages
     * [x] Message timestamps
+    * [ ] As many messages that are visible in LINE extension
   * [x] Chat types
     * [x] Direct chats
     * [x] Groups (named chats)
     * [x] Rooms (unnamed chats / "multi-user direct chats")
   * [ ] Membership actions
-    * [x] Add member
-    * [ ] Remove member
-    * [ ] Block
+    * [ ] Join
+      * [x] When message is sent by new participant
+      * [x] On sync
+      * [ ] At join time
+    * [ ] Leave
+      * [x] On sync
+      * [ ] At leave time
+    * [ ] Invite
+    * [ ] Remove
+  * [ ] Friend actions
+    * [ ] Add friend
+    * [ ] Block user
+    * [ ] Unblock user
 * Misc
   * [x] Automatic portal creation
     * [x] At startup
     * [x] When receiving invite or message
     * [ ] When sending message in new chat from LINE app
+  * [x] Notification for message send failure
   * [ ] Provisioning API for logging in
   * [x] Use bridge bot for messages sent from LINE app (when double-puppeting is disabled and `bridge.invite_own_puppet_to_pm` is enabled)
   * [x] Use own Matrix account for messages sent from LINE app (when double-puppeting is enabled)
@@ -66,8 +77,8 @@
   * [ ] Multiple bridge users
   * [ ] Relay bridging
 
-## Missing features
-### Missing from LINE
+# Missing features
+## Missing from LINE
 * Typing notifications
 * Message edits
 * Formatted messages
@@ -75,13 +86,22 @@
 * Timestamped read receipts
 * Read receipts between users other than yourself
 
-### Missing from LINE on Chrome
-* Message redaction (delete/unsend)
-* Replies
-* Audio message sending
-* Location sending
-* Voice/video calls
+## Missing from LINE on Chrome
 * Unlimited message history
+    * Messages that are very old may not be available in LINE on Chrome at all, even after a full sync
+* Voice/video calls
+    * No notification is sent when a call begins
+    * When a call ends, an automated message of "Your OS version doesn't support this feature" is sent as an ordinary text message from the user who began the call
+* Message redaction (delete/unsend)
+    * But messages unsent from other LINE clients do disappear from LINE on Chrome
+* Replies
+    * Appear as ordinary messages
+* Mentions
+    * Appear as ordinary text
+* Audio message sending
+    * But audio messages can be received
+* Location sending
+    * But locations can be received
 
-### Missing from matrix-puppeteer-line
+## Missing from matrix-puppeteer-line
 * TODO
