@@ -233,7 +233,7 @@ class Portal(DBPortal, BasePortal):
                     self.log.warning(f"Could not find ID of LINE user who sent event {evt.id}")
                     sender = await p.Puppet.get_by_profile(evt.sender, source.client)
             intent = sender.intent
-            intent.ensure_joined(self.mxid)
+            await intent.ensure_joined(self.mxid)
 
         if evt.image and evt.image.url:
             if not evt.image.is_sticker or self.config["bridge.receive_stickers"]:
