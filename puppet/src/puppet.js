@@ -500,8 +500,7 @@ export default class MessagesPuppeteer {
 	}
 
 	async _getChatInfoUnsafe(chatID) {
-		const chatListItem = await this.page.$(this._listItemSelector(chatID))
-		const chatListInfo = await chatListItem.evaluate(
+		const chatListInfo = await this.page.$eval(this._listItemSelector(chatID),
 			(element, chatID) => window.__mautrixController.parseChatListItem(element, chatID),
 			chatID)
 
@@ -520,12 +519,12 @@ export default class MessagesPuppeteer {
 
 		let participants
 		if (!isDirect) {
-			this.log("Found multi-user chat, so clicking chat header to get participants")
+			this.log("Found multi-user chat, so viewing it to get participants")
 			// TODO This will mark the chat as "read"!
 			await this._switchChat(chatID)
 			const participantList = await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
 			// TODO Is a group not actually created until a message is sent(?)
-			// 		If so, maybe don't create a portal until there is a message.
+			//      If so, maybe don't create a portal until there is a message.
 			participants = await participantList.evaluate(
 				element => window.__mautrixController.parseParticipantList(element))
 		} else {
@@ -547,9 +546,9 @@ export default class MessagesPuppeteer {
 	}
 
 	// TODO Catch "An error has occurred" dialog
-	// 		Selector is just "dialog", then "button"
-	// 		Child of "#layer_contents"
-	// 		Always present, just made visible via classes
+	//      Selector is just "dialog", then "button"
+	//      Child of "#layer_contents"
+	//      Always present, just made visible via classes
 
 	async _sendMessageUnsafe(chatID, text) {
 		await this._switchChat(chatID)
