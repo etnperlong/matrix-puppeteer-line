@@ -45,7 +45,7 @@ appservice:
     # Display name and avatar for bot. Set to "remove" to remove display name/avatar, leave empty
     # to leave display name/avatar as-is.
     bot_displayname: LINE bridge bot
-    bot_avatar: mxc://maunium.net/VuvevQiMRlOxuBVMBNEZZrxi
+    bot_avatar: mxc://miscworks.net/uyHgFSLDDtATVGjtjWKwxrkK
 
     # Community ID for bridged users (changes registration file) and rooms.
     # Must be created manually.

@@ -64,8 +64,8 @@ class ProvisioningAPI:
             return None
         for part in auth_parts:
             part = part.strip()
-            if part.startswith("net.maunium.line.auth-"):
-                return part[len("net.maunium.line.auth-"):]
+            if part.startswith("net.miscworks.line.auth-"):
+                return part[len("net.miscworks.line.auth-"):]
         return None
 
     def check_token(self, request: web.Request) -> Awaitable['u.User']:
@@ -107,7 +107,7 @@ class ProvisioningAPI:
         if status.is_logged_in:
             raise web.HTTPConflict(text='{"error": "Already logged in"}', headers=self._headers)
 
-        ws = web.WebSocketResponse(protocols=["net.maunium.line.login"])
+        ws = web.WebSocketResponse(protocols=["net.miscworks.line.login"])
         await ws.prepare(request)
         try:
             async for url in user.client.login():

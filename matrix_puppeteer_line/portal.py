@@ -563,7 +563,7 @@ class Portal(DBPortal, BasePortal):
 
     @property
     def bridge_info_state_key(self) -> str:
-        return f"net.maunium.line://line/{self.chat_id}"
+        return f"net.miscworks.line://line/{self.chat_id}"
 
     @property
     def bridge_info(self) -> Dict[str, Any]:
