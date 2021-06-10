@@ -132,6 +132,7 @@ class Portal(DBPortal, BasePortal):
         elif ((message.get(self.bridge.real_user_content_key,
                            False) and await p.Puppet.get_by_custom_mxid(sender.mxid))):
             self.log.debug(f"Ignoring puppet-sent message by confirmed puppet user {sender.mxid}")
+            await self._send_delivery_receipt(event_id)
             return
         # TODO deduplication of outgoing messages
         text = message.body
