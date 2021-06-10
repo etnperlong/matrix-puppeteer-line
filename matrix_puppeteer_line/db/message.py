@@ -29,20 +29,17 @@ class Message:
 
     mxid: EventID
     mx_room: RoomID
-    mid: int
+    mid: Optional[int]
     chat_id: str
 
     async def insert(self) -> None:
         q = "INSERT INTO message (mxid, mx_room, mid, chat_id) VALUES ($1, $2, $3, $4)"
         await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id)
 
-    async def delete(self) -> None:
-        q = "DELETE FROM message WHERE mid=$1"
-        await self.db.execute(q, self.mid)
-
-    @classmethod
-    async def delete_all(cls, room_id: RoomID) -> None:
-        await cls.db.execute("DELETE FROM message WHERE mx_room=$1", room_id)
+    async def update(self) -> None:
+        q = ("UPDATE message SET mid=$3, chat_id=$4 "
+             "WHERE mxid=$1 AND mx_room=$2")
+        await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id)
 
     @classmethod
     async def get_max_mid(cls, room_id: RoomID) -> int:
@@ -56,6 +53,11 @@ class Message:
         for row in rows:
             data[row["chat_id"]] = row["max_mid"]
         return data
+
+    @classmethod
+    async def get_num_noid_msgs(cls, room_id: RoomID) -> int:
+        return await cls.db.fetchval("SELECT COUNT(*) FROM message "
+                                     "WHERE mid IS NULL AND mx_room=$1", room_id)
 
     @classmethod
     async def get_by_mxid(cls, mxid: EventID, mx_room: RoomID) -> Optional['Message']:
@@ -72,3 +74,17 @@ class Message:
         if not row:
             return None
         return cls(**row)
+
+    @classmethod
+    async def get_next_noid_msg(cls, room_id: RoomID) -> Optional['Message']:
+        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id FROM message "
+                                    "WHERE mid IS NULL AND mx_room=$1", room_id)
+        if not row:
+            return None
+        return cls(**row)
+
+    @classmethod
+    async def delete_all_noid_msgs(cls, room_id: RoomID) -> None:
+        status = await cls.db.execute("DELETE FROM message "
+                                      "WHERE mid IS NULL AND mx_room=$1", room_id)
+        return int(status.removeprefix("DELETE "))

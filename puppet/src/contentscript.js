@@ -23,7 +23,7 @@
  */
 window.__chronoParseDate = function (text, ref, option) {}
 /**
- * @param {string[]} changes - The hrefs of the chats that changed.
+ * @param {ChatListInfo[]} changes - The chats that changed.
  * @return {Promise<void>}
  */
 window.__mautrixReceiveChanges = function (changes) {}
@@ -609,6 +609,8 @@ class MautrixController {
 	 *                              May be prefixed by sender name.
 	 * @property {string} lastMsgDate - An imprecise date for the most recent message
 	 *                                  (e.g. "7:16 PM", "Thu" or "Aug 4")
+	 * @property {number} notificationCount - The number of unread messages in the chat,
+	 *                                        signified by the number in its notification badge.
 	 */
 
 	getChatListItemID(element) {
@@ -624,11 +626,15 @@ class MautrixController {
 	}
 
 	getChatListItemLastMsg(element) {
-		return element.querySelector(".mdCMN04Desc").innerText
+		return element.querySelector(".mdCMN04Desc").innerHTML
 	}
 
 	getChatListItemLastMsgDate(element) {
 		return element.querySelector("time").innerText
+	}
+
+	getChatListItemNotificationCount(element) {
+		return Number.parseInt(element.querySelector(".MdIcoBadge01:not(.MdNonDisp)")?.innerText) || 0
 	}
 
 	/**
@@ -645,6 +651,7 @@ class MautrixController {
 			icon: this.getChatListItemIcon(element),
 			lastMsg: this.getChatListItemLastMsg(element),
 			lastMsgDate: this.getChatListItemLastMsgDate(element),
+			notificationCount: this.getChatListItemNotificationCount(element),
 		}
 	}
 
@@ -682,7 +689,7 @@ class MautrixController {
 	 */
 	_observeChatListMutations(mutations) {
 		// TODO Observe *added/removed* chats, not just new messages
-		const changedChatIDs = new Set()
+		const changedChats = new Set()
 		for (const change of mutations) {
 			if (change.target.id == "_chat_list_body") {
 				// TODO
@@ -701,7 +708,7 @@ class MautrixController {
 					const chat = this.parseChatListItem(node)
 					if (chat) {
 						console.log("Added chat list item:", chat)
-						changedChatIDs.add(chat.id)
+						changedChats.add(chat)
 					} else {
 						console.debug("Could not parse added node as a chat list item:", node)
 					}
@@ -709,9 +716,9 @@ class MautrixController {
 			}
 			// change.removedNodes tells you which chats that had notifications are now read.
 		}
-		if (changedChatIDs.size > 0) {
-			console.debug("Dispatching chat list mutations:", changedChatIDs)
-			window.__mautrixReceiveChanges(Array.from(changedChatIDs)).then(
+		if (changedChats.size > 0) {
+			console.debug("Dispatching chat list mutations:", changedChats)
+			window.__mautrixReceiveChanges(Array.from(changedChats)).then(
 				() => console.debug("Chat list mutations dispatched"),
 				err => console.error("Error dispatching chat list mutations:", err))
 		}

@@ -60,7 +60,7 @@ class MessageImage(SerializableAttrs['MessageImage']):
 
 @dataclass
 class Message(SerializableAttrs['Message']):
-    id: int
+    id: Optional[int]
     chat_id: int
     is_outgoing: bool
     sender: Optional[Participant]

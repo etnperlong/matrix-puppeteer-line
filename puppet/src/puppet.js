@@ -46,6 +46,7 @@ export default class MessagesPuppeteer {
 		this.updatedChats = new Set()
 		this.sentMessageIDs = new Set()
 		this.mostRecentMessages = new Map()
+		this.numChatNotifications = new Map()
 		this.taskQueue = new TaskQueue(this.id)
 		this.client = client
 	}
@@ -551,7 +552,8 @@ export default class MessagesPuppeteer {
 	//      Always present, just made visible via classes
 
 	async _sendMessageUnsafe(chatID, text) {
-		await this._switchChat(chatID)
+		// Sync all messages in this chat first
+		this._receiveMessages(chatID, await this._getMessagesUnsafe(chatID), true)
 		// TODO Initiate the promise in the content script
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
@@ -565,7 +567,7 @@ export default class MessagesPuppeteer {
 	}
 
 	async _sendFileUnsafe(chatID, filePath) {
-		await this._switchChat(chatID)
+		this._receiveMessages(chatID, await this._getMessagesUnsafe(chatID), true)
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(
 				10000, // Use longer timeout for file uploads
@@ -604,9 +606,11 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	async _receiveMessages(chatID, messages) {
+	_receiveMessages(chatID, messages, skipProcessing = false) {
 		if (this.client) {
-			messages = await this._processMessages(chatID, messages)
+			if (!skipProcessing) {
+				messages = this._processMessages(chatID, messages)
+			}
 			for (const message of messages) {
 				this.client.sendMessage(message).catch(err =>
 					this.error("Failed to send message", message.id, "to client:", err))
@@ -626,11 +630,13 @@ export default class MessagesPuppeteer {
 		// TODO Handle unloaded messages. Maybe scroll up
 		// TODO This will mark the chat as "read"!
 		await this._switchChat(chatID)
-		const messages = await this.page.evaluate(
+		// TODO Is it better to reset the notification count in _switchChat instead of here?
+		this.numChatNotifications.set(chatID, 0)
+		let messages = await this.page.evaluate(
 			mostRecentMessage => window.__mautrixController.parseMessageList(mostRecentMessage),
 			this.mostRecentMessages.get(chatID))
 		// Doing this before restoring the observer since it updates minID
-		const filteredMessages = await this._processMessages(chatID, messages)
+		messages = this._processMessages(chatID, messages)
 
 		if (hadMsgListObserver) {
 			this.log("Restoring msg list observer")
@@ -641,10 +647,10 @@ export default class MessagesPuppeteer {
 			this.log("Not restoring msg list observer, as there never was one")
 		}
 
-		return filteredMessages
+		return messages
 	}
 
-	async _processMessages(chatID, messages) {
+	_processMessages(chatID, messages) {
 		// TODO Probably don't need minID filtering if Puppeteer context handles it now
 		const minID = this.mostRecentMessages.get(chatID) || 0
 		const filteredMessages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
@@ -655,7 +661,6 @@ export default class MessagesPuppeteer {
 			this.mostRecentMessages.set(chatID, newLastID)
 			const range = newFirstID === newLastID ? newFirstID : `${newFirstID}-${newLastID}`
 			this.log(`Loaded ${messages.length} messages in ${chatID}, got ${filteredMessages.length} newer than ${minID} (${range})`)
-
 			for (const message of filteredMessages) {
 				message.chat_id = chatID
 			}
@@ -665,19 +670,59 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	async _processChatListChangeUnsafe(chatID) {
+	async _processChatListChangeUnsafe(chatListInfo) {
+		const chatID = chatListInfo.id
 		this.updatedChats.delete(chatID)
 		this.log("Processing change to", chatID)
-		const messages = await this._getMessagesUnsafe(chatID)
-		if (messages.length === 0) {
-			this.log("No new messages found in", chatID)
+		// TODO Also process name/icon changes
+
+		const prevNumNotifications = this.numChatNotifications.get(chatID) || 0
+		const diffNumNotifications = chatListInfo.notificationCount - prevNumNotifications
+
+		if (chatListInfo.notificationCount == 0 && diffNumNotifications < 0) {
+			// Message was read from another LINE client, so there's no new info to bridge.
+			// But if the diff == 0, it's an own message sent from LINE, and must bridge it!
+			this.numChatNotifications.set(chatID, 0)
 			return
+		}
+
+		const mustSync =
+			// Can only use previews for DMs, because sender can't be found otherwise!
+			   chatListInfo.id.charAt(0) != 'u'
+			|| diffNumNotifications > 1
+			// Sync when lastMsg is a canned message for a non-previewable message type.
+			|| chatListInfo.lastMsg.endsWith(" sent a photo.")
+			|| chatListInfo.lastMsg.endsWith(" sent a sticker.")
+			|| chatListInfo.lastMsg.endsWith(" sent a location.")
+			// TODO More?
+		// TODO With MSC2409, only sync if >1 new messages arrived,
+		//      or if message is unpreviewable.
+		//      Otherwise, send a dummy notice & sync when its read.
+
+		let messages
+		if (!mustSync) {
+			messages = [{
+				chat_id: chatListInfo.id,
+				id: null, // because sidebar messages have no ID
+				timestamp: null, // because this message was sent right now
+				is_outgoing: chatListInfo.notificationCount == 0,
+				sender: null, // because only DM messages are handled
+				html: chatListInfo.lastMsg,
+			}]
+			this.numChatNotifications.set(chatID, chatListInfo.notificationCount)
+		} else {
+			messages = await this._getMessagesUnsafe(chatListInfo.id)
+			this.numChatNotifications.set(chatID, 0)
+			if (messages.length === 0) {
+				this.log("No new messages found in", chatListInfo.id)
+				return
+			}
 		}
 
 		if (this.client) {
 			for (const message of messages) {
 				await this.client.sendMessage(message).catch(err =>
-					this.error("Failed to send message", message.id, "to client:", err))
+					this.error("Failed to send message", message.id || "with no ID", "to client:", err))
 			}
 		} else {
 			this.log("No client connected, not sending messages")
@@ -685,10 +730,10 @@ export default class MessagesPuppeteer {
 	}
 
 	_receiveChatListChanges(changes) {
-		this.log("Received chat list changes:", changes)
+		this.log(`Received chat list changes: ${changes.map(item => item.id)}`)
 		for (const item of changes) {
-			if (!this.updatedChats.has(item)) {
-				this.updatedChats.add(item)
+			if (!this.updatedChats.has(item.id)) {
+				this.updatedChats.add(item.id)
 				this.taskQueue.push(() => this._processChatListChangeUnsafe(item))
 					.catch(err => this.error("Error handling chat list changes:", err))
 			}

@@ -129,3 +129,10 @@ async def upgrade_strangers(conn: Connection) -> None:
             REFERENCES puppet (mid)
             ON DELETE CASCADE
    )""")
+
+
+@upgrade_table.register(description="Track messages that lack an ID")
+async def upgrade_noid_msgs(conn: Connection) -> None:
+    await conn.execute("ALTER TABLE message DROP CONSTRAINT IF EXISTS message_pkey")
+    await conn.execute("ALTER TABLE message ALTER COLUMN mid DROP NOT NULL")
+    await conn.execute("ALTER TABLE message ADD UNIQUE (mid)")

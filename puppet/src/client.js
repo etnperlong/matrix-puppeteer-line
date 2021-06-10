@@ -99,7 +99,7 @@ export default class Client {
 	}
 
 	sendMessage(message) {
-		this.log(`Sending message ${message.id} to client`)
+		this.log(`Sending message ${message.id || "with no ID"} to client`)
 		return this._write({
 			id: --this.notificationID,
 			command: "message",

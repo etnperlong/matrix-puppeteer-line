@@ -124,6 +124,11 @@ class Portal(DBPortal, BasePortal):
             except Exception:
                 self.log.exception("Failed to send delivery receipt for %s", event_id)
 
+    async def _cleanup_noid_msgs(self) -> None:
+        num_noid_msgs = await DBMessage.delete_all_noid_msgs(self.mxid)
+        if num_noid_msgs > 0:
+            self.log.warn(f"Found {num_noid_msgs} messages in chat {self.chat_id} with no ID that could not be matched with a real ID")
+
     async def handle_matrix_message(self, sender: 'u.User', message: MessageEventContent,
                                     event_id: EventID) -> None:
         if not sender.client:
@@ -163,6 +168,8 @@ class Portal(DBPortal, BasePortal):
                 self.log.warning(f"Failed to upload media {event_id} to chat {self.chat_id}: {e}")
                 message_id = -1
             remove(file_path)
+
+        await self._cleanup_noid_msgs()
         msg = None
         if message_id != -1:
             try:
@@ -211,6 +218,8 @@ class Portal(DBPortal, BasePortal):
             self.log.debug(f"Ignoring duplicate message {evt.id}")
             return
 
+        is_preseen = evt.id != None and await DBMessage.get_num_noid_msgs(self.mxid) > 0
+
         if evt.is_outgoing:
             if source.intent:
                 sender = None
@@ -230,12 +239,21 @@ class Portal(DBPortal, BasePortal):
                 if sender:
                     await sender.update_info(evt.sender, source.client)
                 else:
-                    self.log.warning(f"Could not find ID of LINE user who sent event {evt.id}")
+                    self.log.warning(f"Could not find ID of LINE user who sent event {evt.id or 'with no ID'}")
                     sender = await p.Puppet.get_by_profile(evt.sender, source.client)
             intent = sender.intent
             await intent.ensure_joined(self.mxid)
 
-        if evt.image and evt.image.url:
+        if is_preseen:
+            msg = await DBMessage.get_next_noid_msg(self.mxid)
+            if msg:
+                self.log.debug(f"Found ID {evt.id} of preseen message in chat {self.mxid} {msg.mxid}")
+                msg.mid = evt.id
+                event_id = msg.mxid
+            else:
+                self.log.error(f"Could not find an existing event for a message with no ID in chat {self.mxid}")
+                return
+        elif evt.image and evt.image.url:
             if not evt.image.is_sticker or self.config["bridge.receive_stickers"]:
                 media_info = await self._handle_remote_media(
                     source, intent, evt.image.url,
@@ -335,13 +353,18 @@ class Portal(DBPortal, BasePortal):
 
         if evt.is_outgoing and evt.receipt_count:
             await self._handle_receipt(event_id, evt.receipt_count)
-        msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
-        try:
-            await msg.insert()
-            await self._send_delivery_receipt(event_id)
-            self.log.debug(f"Handled remote message {evt.id} -> {event_id}")
-        except UniqueViolationError as e:
-            self.log.debug(f"Failed to handle remote message {evt.id} -> {event_id}: {e}")
+
+        if not is_preseen:
+            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
+            try:
+                await msg.insert()
+                #await self._send_delivery_receipt(event_id)
+                self.log.debug(f"Handled remote message {evt.id or 'with no ID'} -> {event_id}")
+            except UniqueViolationError as e:
+                self.log.debug(f"Failed to handle remote message {evt.id or 'with no ID'} -> {event_id}: {e}")
+        else:
+            await msg.update()
+            self.log.debug(f"Handled preseen remote message {evt.id} -> {event_id}")
 
     async def handle_remote_receipt(self, receipt: Receipt) -> None:
         msg = await DBMessage.get_by_mid(receipt.id)
@@ -553,6 +576,7 @@ class Portal(DBPortal, BasePortal):
 
         if not messages:
             self.log.debug("Didn't get any entries from server")
+            await self._cleanup_noid_msgs()
             return
 
         self.log.debug("Got %d messages from server", len(messages))
@@ -560,6 +584,7 @@ class Portal(DBPortal, BasePortal):
             for evt in messages:
                 await self.handle_remote_message(source, evt)
         self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
+        await self._cleanup_noid_msgs()
 
     @property
     def bridge_info_state_key(self) -> str:
@@ -713,9 +738,6 @@ class Portal(DBPortal, BasePortal):
             self._main_intent = self.az.intent
 
     async def delete(self) -> None:
-        if self.mxid:
-            # TODO Handle this with db foreign keys instead
-            await DBMessage.delete_all(self.mxid)
         self.by_chat_id.pop(self.chat_id, None)
         self.by_mxid.pop(self.mxid, None)
         await super().delete()
