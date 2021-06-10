@@ -409,7 +409,7 @@ export default class MessagesPuppeteer {
 			this.mostRecentMessages.set(chatID, messageID)
 		}
 		this.log("Updated most recent message ID map:")
-		this.log(this.mostRecentMessages)
+		this.log(JSON.stringify(this.mostRecentMessages))
 	}
 
 	async readImage(imageUrl) {
@@ -540,7 +540,7 @@ export default class MessagesPuppeteer {
 
 		this.log("Found participants:")
 		for (const participant of participants) {
-			this.log(participant)
+			this.log(JSON.stringify(participant))
 		}
 		return {participants, ...chatListInfo}
 	}
