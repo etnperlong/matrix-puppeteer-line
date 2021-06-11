@@ -259,7 +259,7 @@ export default class Client {
 				pause: () => this.puppet.stopObserving(),
 				resume: () => this.puppet.startObserving(),
 				get_chats: () => this.puppet.getRecentChats(),
-				get_chat: req => this.puppet.getChatInfo(req.chat_id),
+				get_chat: req => this.puppet.getChatInfo(req.chat_id, req.force_view),
 				get_messages: req => this.puppet.getMessages(req.chat_id),
 				read_image: req => this.puppet.readImage(req.image_url),
 				is_connected: async () => ({ is_connected: !await this.puppet.isDisconnected() }),

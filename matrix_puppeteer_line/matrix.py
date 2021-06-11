@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING
 
 from mautrix.bridge import BaseMatrixHandler
 from mautrix.types import (Event, ReactionEvent, MessageEvent, StateEvent, EncryptedEvent, RedactionEvent,
+                           ReceiptEvent, SingleReceiptEventContent,
                            EventID, RoomID, UserID)
 
 from . import portal as po, puppet as pu, user as u
+from .db import Message as DBMessage
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
@@ -35,8 +37,9 @@ class MatrixHandler(BaseMatrixHandler):
         super().__init__(bridge=bridge)
 
     def filter_matrix_event(self, evt: Event) -> bool:
-        if not isinstance(evt, (ReactionEvent, MessageEvent, StateEvent, EncryptedEvent,
-                                RedactionEvent)):
+        if isinstance(evt, ReceiptEvent):
+            return False
+        if not isinstance(evt, (MessageEvent, StateEvent, EncryptedEvent)):
             return True
         return (evt.sender == self.az.bot_mxid
                 or pu.Puppet.get_id_from_mxid(evt.sender) is not None)
@@ -59,3 +62,12 @@ class MatrixHandler(BaseMatrixHandler):
             return
 
         await portal.handle_matrix_leave(user)
+
+    async def handle_read_receipt(self, user: 'u.User', portal: 'po.Portal', event_id: EventID,
+                                  data: SingleReceiptEventContent) -> None:
+        # When reading a bridged message, view its chat in LINE, to make it send a read receipt.
+        # Only visit a LINE chat when its LAST bridge message has been read,
+        # because LINE lacks per-message read receipts--it's all or nothing!
+        if await DBMessage.is_last_by_mxid(event_id, portal.mxid):
+            # Viewing a chat by updating it whole-hog, lest a ninja arrives
+            await user.sync_portal(portal)

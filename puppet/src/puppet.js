@@ -90,6 +90,10 @@ export default class MessagesPuppeteer {
 		} else {
 			this.page = await this.browser.newPage()
 		}
+
+		this.blankPage = await this.browser.newPage()
+		await this.page.bringToFront()
+
 		this.log("Opening", MessagesPuppeteer.url)
 		await this.page.setBypassCSP(true) // Needed to load content scripts
 		await this._preparePage(true)
@@ -120,6 +124,7 @@ export default class MessagesPuppeteer {
 	}
 
 	async _preparePage(navigateTo) {
+		await this.page.bringToFront()
 		if (navigateTo) {
 			await this.page.goto(MessagesPuppeteer.url)
 		} else {
@@ -127,6 +132,18 @@ export default class MessagesPuppeteer {
 		}
 		this.log("Injecting content script")
 		await this.page.addScriptTag({ path: "./src/contentscript.js", type: "module" })
+	}
+
+	async _interactWithPage(promiser) {
+		await this.page.bringToFront()
+		try {
+			await promiser()
+		} catch (e) {
+			this.error(`Error while interacting with page: ${e}`)
+			throw e
+		} finally {
+			await this.blankPage.bringToFront()
+		}
 	}
 
 	/**
@@ -137,6 +154,7 @@ export default class MessagesPuppeteer {
 			return
 		}
 		this.loginRunning = true
+		await this.page.bringToFront()
 
 		const loginContentArea = await this.page.waitForSelector("#login_content")
 
@@ -255,6 +273,7 @@ export default class MessagesPuppeteer {
 		}
 
 		this.loginRunning = false
+		await this.blankPage.bringToFront()
 		// Don't start observing yet, instead wait for explicit request.
 		// But at least view the most recent chat.
 		try {
@@ -377,10 +396,11 @@ export default class MessagesPuppeteer {
 	 * Get info about a chat.
 	 *
 	 * @param {string} chatID - The chat ID whose info to get.
+	 * @param {boolean} forceView - Whether the LINE tab should always be viewed, even if the chat is already active.
 	 * @return {Promise<ChatInfo>} - Info about the chat.
 	 */
-	async getChatInfo(chatID) {
-		return await this.taskQueue.push(() => this._getChatInfoUnsafe(chatID))
+	async getChatInfo(chatID, forceView) {
+		return await this.taskQueue.push(() => this._getChatInfoUnsafe(chatID, forceView))
 	}
 
 	/**
@@ -448,7 +468,7 @@ export default class MessagesPuppeteer {
 		return `#_chat_list_body div[data-chatid="${id}"]`
 	}
 
-	async _switchChat(chatID) {
+	async _switchChat(chatID, forceView = false) {
 		// TODO Allow passing in an element directly
 		this.log(`Switching to chat ${chatID}`)
 		const chatListItem = await this.page.$(this._listItemSelector(chatID))
@@ -464,30 +484,41 @@ export default class MessagesPuppeteer {
 		}
 
 		if (await this.page.evaluate(isCorrectChatVisible, chatName)) {
-			this.log("Already viewing chat, no need to switch")
+			if (!forceView) {
+				this.log("Already viewing chat, no need to switch")
+			} else {
+				await this._interactWithPage(async () => {
+					this.log("Already viewing chat, but got request to view it")
+					this.page.waitForTimeout(500)
+				})
+			}
 		} else {
 			this.log("Ensuring msg list observer is removed")
 			const hadMsgListObserver = await this.page.evaluate(
 				() => window.__mautrixController.removeMsgListObserver())
 			this.log(hadMsgListObserver ? "Observer was already removed" : "Removed observer")
 
-			await chatListItem.click()
-			this.log(`Waiting for chat header title to be "${chatName}"`)
-			await this.page.waitForFunction(
-				isCorrectChatVisible,
-				{polling: "mutation"},
-				chatName)
+			await this._interactWithPage(async () => {
+				this.log(`Clicking chat list item`)
+				chatListItem.click()
+				this.log(`Waiting for chat header title to be "${chatName}"`)
+				await this.page.waitForFunction(
+					isCorrectChatVisible,
+					{polling: "mutation"},
+					chatName)
 
-			// Always show the chat details sidebar, as this makes life easier
-			this.log("Waiting for detail area to be auto-hidden upon entering chat")
-			await this.page.waitForFunction(
-				detailArea => detailArea.childElementCount == 0,
-				{},
-				await this.page.$("#_chat_detail_area"))
-			this.log("Clicking chat header to show detail area")
-			await this.page.click("#_chat_header_area > .mdRGT04Link")
-			this.log("Waiting for detail area")
-			await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
+				// Always show the chat details sidebar, as this makes life easier
+				this.log("Waiting for detail area to be auto-hidden upon entering chat")
+				await this.page.waitForFunction(
+					detailArea => detailArea.childElementCount == 0,
+					{},
+					await this.page.$("#_chat_detail_area"))
+
+				this.log("Clicking chat header to show detail area")
+				await this.page.click("#_chat_header_area > .mdRGT04Link")
+				this.log("Waiting for detail area")
+				await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
+			})
 
 			if (hadMsgListObserver) {
 				this.log("Restoring msg list observer")
@@ -500,7 +531,7 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	async _getChatInfoUnsafe(chatID) {
+	async _getChatInfoUnsafe(chatID, forceView) {
 		const chatListInfo = await this.page.$eval(this._listItemSelector(chatID),
 			(element, chatID) => window.__mautrixController.parseChatListItem(element, chatID),
 			chatID)
@@ -522,7 +553,7 @@ export default class MessagesPuppeteer {
 		if (!isDirect) {
 			this.log("Found multi-user chat, so viewing it to get participants")
 			// TODO This will mark the chat as "read"!
-			await this._switchChat(chatID)
+			await this._switchChat(chatID, forceView)
 			const participantList = await this.page.$("#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul")
 			// TODO Is a group not actually created until a message is sent(?)
 			//      If so, maybe don't create a portal until there is a message.
@@ -530,6 +561,10 @@ export default class MessagesPuppeteer {
 				element => window.__mautrixController.parseParticipantList(element))
 		} else {
 			this.log(`Found direct chat with ${chatID}`)
+			if (forceView) {
+				this.log("Viewing chat on request")
+				await this._switchChat(chatID, forceView)
+			}
 			//const chatDetailArea = await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			//await chatDetailArea.$(".MdTxtDesc02") || // 1:1 chat with custom title - get participant's real name
 			participants = [{
@@ -559,9 +594,11 @@ export default class MessagesPuppeteer {
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
 
 		const input = await this.page.$("#_chat_room_input")
-		await input.click()
-		await input.type(text)
-		await input.press("Enter")
+		await this._interactWithPage(async () => {
+			await input.click()
+			await input.type(text)
+			await input.press("Enter")
+		})
 
 		return await this._waitForSentMessage(chatID)
 	}
@@ -575,13 +612,15 @@ export default class MessagesPuppeteer {
 				"#_chat_message_fail_menu"))
 
 		try {
-			this.log(`About to ask for file chooser in ${chatID}`)
-			const [fileChooser] = await Promise.all([
-				this.page.waitForFileChooser(),
-				this.page.click("#_chat_room_plus_btn")
-			])
-			this.log(`About to upload ${filePath}`)
-			await fileChooser.accept([filePath])
+			this._interactWithPage(async () => {
+				this.log(`About to ask for file chooser in ${chatID}`)
+				const [fileChooser] = await Promise.all([
+					this.page.waitForFileChooser(),
+					this.page.click("#_chat_room_plus_btn")
+				])
+				this.log(`About to upload ${filePath}`)
+				await fileChooser.accept([filePath])
+			})
 		} catch (e) {
 			this.log(`Failed to upload file to ${chatID}`)
 			return -1
@@ -826,6 +865,7 @@ export default class MessagesPuppeteer {
 	_onLoggedOut() {
 		this.log("Got logged out!")
 		this.stopObserving()
+		this.page.bringToFront()
 		if (this.client) {
 			this.client.sendLoggedOut().catch(err =>
 				this.error("Failed to send logout notice to client:", err))

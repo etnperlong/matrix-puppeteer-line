@@ -144,6 +144,14 @@ class User(DBUser, BaseUser):
         await self.send_bridge_notice("Synchronization complete")
         await self.client.resume()
 
+    async def sync_portal(self, portal: 'po.Portal') -> None:
+        chat_id = portal.chat_id
+        self.log.info(f"Viewing (and syncing) chat {chat_id}")
+        await self.client.pause()
+        chat = await self.client.get_chat(chat_id, True)
+        await portal.update_matrix_room(self, chat)
+        await self.client.resume()
+
     async def stop(self) -> None:
         # TODO Notices for shutdown messages
         if self._connection_check_task:

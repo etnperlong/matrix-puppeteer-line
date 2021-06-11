@@ -45,8 +45,8 @@ class Client(RPCClient):
         resp = await self.request("get_chats")
         return [ChatListInfo.deserialize(data) for data in resp]
 
-    async def get_chat(self, chat_id: str) -> ChatInfo:
-        return ChatInfo.deserialize(await self.request("get_chat", chat_id=chat_id))
+    async def get_chat(self, chat_id: str, force_view: bool = False) -> ChatInfo:
+        return ChatInfo.deserialize(await self.request("get_chat", chat_id=chat_id, force_view=force_view))
 
     async def get_messages(self, chat_id: str) -> List[Message]:
         resp = await self.request("get_messages", chat_id=chat_id)

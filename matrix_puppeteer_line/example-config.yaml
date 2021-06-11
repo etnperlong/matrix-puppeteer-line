@@ -57,6 +57,12 @@ appservice:
     as_token: "This value is generated when generating the registration"
     hs_token: "This value is generated when generating the registration"
 
+    # Whether or not to receive ephemeral events via appservice transactions.
+    # Requires MSC2409 support (i.e. Synapse 1.22+).
+    # This is REQUIRED in order to bypass Puppeteer needing to "view" a LINE chat
+    # (thus triggering a LINE read receipt on your behalf) to sync its messages.
+    ephemeral_events: false
+
 # Prometheus telemetry config. Requires prometheus-client to be installed.
 metrics:
     enabled: false

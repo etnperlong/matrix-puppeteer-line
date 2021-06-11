@@ -60,6 +60,18 @@ class Message:
                                      "WHERE mid IS NULL AND mx_room=$1", room_id)
 
     @classmethod
+    async def is_last_by_mxid(cls, mxid: EventID, room_id: RoomID) -> bool:
+        q = ("SELECT mxid "
+             "FROM message INNER JOIN ( "
+             "    SELECT mx_room, MAX(mid) AS max_mid "
+             "    FROM message GROUP BY mx_room "
+             ") by_room "
+             "ON mid=max_mid "
+             "WHERE by_room.mx_room=$1")
+        last_mxid = await cls.db.fetchval(q, room_id)
+        return last_mxid == mxid
+
+    @classmethod
     async def get_by_mxid(cls, mxid: EventID, mx_room: RoomID) -> Optional['Message']:
         row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id "
                                     "FROM message WHERE mxid=$1 AND mx_room=$2", mxid, mx_room)
