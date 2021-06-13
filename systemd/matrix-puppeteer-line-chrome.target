@@ -3,4 +3,3 @@ Description=Matrix puppeteer line bridge target
 Requires=multi-user.target network.target
 After=multi-user.target network.target
 BindsTo=matrix-puppeteer-line-chrome.service
-PartOf=matrix-puppeteer-line.service

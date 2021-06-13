@@ -1,6 +1,6 @@
 [Unit]
 Description=Matrix-puppeteer-line bridge
-Requires=matrix-puppeteer-line-chrome.target
+BindsTo=matrix-puppeteer-line-chrome.target
 After=matrix-puppeteer-line-chrome.target
 
 [Service]
