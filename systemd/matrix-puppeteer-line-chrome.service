@@ -3,11 +3,13 @@ Description=Matrix-puppeteer-line Chrome backend
 PartOf=matrix-puppeteer-line-chrome.target
 
 [Service]
-; User=matrix
+; User=matrix-line
+; Group=matrix
 Type=notify
 NotifyAccess=all
 WorkingDirectory=/opt/synapse/bridges/matrix-puppeteer-line/puppet
 ExecStart=/bin/xvfb-run /usr/bin/node src/main.js
+RuntimeDirectory=matrix/puppeteer-line
 
 [Install]
 WantedBy=multi-user.target
