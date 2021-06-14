@@ -129,6 +129,18 @@ export default class MessagesPuppeteer {
 	}
 
 	/**
+	 * Set the contents of a text input field to the given text.
+	 * Works by triple-clicking the input field to select all existing text, to replace it on type.
+	 *
+	 * @param {ElementHandle} inputElement - The input element to type into.
+	 * @param {string} text                - The text to input.
+	 */
+	async _enterText(inputElement, text) {
+		await inputElement.click({clickCount: 3})
+		await inputElement.type(text)
+	}
+
+	/**
 	 * Wait for the session to be logged in and monitor changes while it's not.
 	 */
 	async waitForLogin(login_type, login_data) {
@@ -557,8 +569,11 @@ export default class MessagesPuppeteer {
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
 
 		const input = await this.page.$("#_chat_room_input")
+		// Live-typing in the field can have its text mismatch what was requested!!
+		// Probably because the input element is a div instead of a real text input...ugh!
+		// Setting its innerText directly works fine though...
 		await input.click()
-		await input.type(text)
+		await input.evaluate((e, text) => e.innerText = text, text)
 		await input.press("Enter")
 
 		return await this._waitForSentMessage(chatID)
@@ -724,18 +739,8 @@ export default class MessagesPuppeteer {
 
 	async _sendEmailCredentials() {
 		this.log("Inputting login credentials")
-
-		// Triple-click input fields to select all existing text and replace it on type
-		let input
-
-		input = await this.page.$("#line_login_email")
-		await input.click({clickCount: 3})
-		await input.type(this.login_email)
-
-		input = await this.page.$("#line_login_pwd")
-		await input.click({clickCount: 3})
-		await input.type(this.login_password)
-
+		await this._enterText(await this.page.$("#line_login_email"), this.login_email)
+		await this._enterText(await this.page.$("#line_login_pwd"), this.login_password)
 		await this.page.click("button#login_btn")
 	}
 
