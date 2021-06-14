@@ -219,7 +219,7 @@ class Portal(DBPortal, BasePortal):
                 if not self.invite_own_puppet_to_pm:
                     self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
                     return
-                sender = p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
+                sender = await p.Puppet.get_by_mid(evt.sender.id) if evt.sender else None
                 intent = await self._bridge_own_message_pm(source, sender, f"message {evt.id}")
                 if not intent:
                     return
