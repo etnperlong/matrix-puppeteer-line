@@ -164,7 +164,7 @@ export default class Client {
 		let started = false
 		if (this.puppet === null) {
 			this.log("Opening new puppeteer for", this.userID)
-			this.puppet = new MessagesPuppeteer(this.userID, this)
+			this.puppet = new MessagesPuppeteer(this.userID, this.ownID, this)
 			this.manager.puppets.set(this.userID, this.puppet)
 			await this.puppet.start(!!req.debug)
 			started = true
@@ -194,11 +194,12 @@ export default class Client {
 
 	handleRegister = async (req) => {
 		this.userID = req.user_id
-		this.log("Registered socket", this.connID, "->", this.userID)
+		this.ownID = req.own_id
+		this.log(`Registered socket ${this.connID} -> ${this.userID}`)
 		if (this.manager.clients.has(this.userID)) {
 			const oldClient = this.manager.clients.get(this.userID)
 			this.manager.clients.set(this.userID, this)
-			this.log("Terminating previous socket", oldClient.connID, "for", this.userID)
+			this.log(`Terminating previous socket ${oldClient.connID} for ${this.userID}`)
 			await oldClient.stop("Socket replaced by new connection")
 		} else {
 			this.manager.clients.set(this.userID, this)
@@ -258,6 +259,7 @@ export default class Client {
 				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids),
 				pause: () => this.puppet.stopObserving(),
 				resume: () => this.puppet.startObserving(),
+				get_own_profile: () => this.puppet.getOwnProfile(),
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id),
 				get_messages: req => this.puppet.getMessages(req.chat_id),

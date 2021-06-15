@@ -36,12 +36,13 @@ export default class MessagesPuppeteer {
 	 * @param {string} id
 	 * @param {?Client} [client]
 	 */
-	constructor(id, client = null) {
+	constructor(id, ownID, client = null) {
 		let profilePath = path.join(MessagesPuppeteer.profileDir, id)
 		if (!profilePath.startsWith("/")) {
 			profilePath = path.join(process.cwd(), profilePath)
 		}
 		this.id = id
+		this.ownID = ownID
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
 		this.sentMessageIDs = new Set()
@@ -231,7 +232,7 @@ export default class MessagesPuppeteer {
 
 		this.log("Removing observers")
 		// TODO __mautrixController is undefined when cancelling, why?
-		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.id)
+		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.ownID)
 		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
@@ -266,15 +267,6 @@ export default class MessagesPuppeteer {
 		}
 
 		this.loginRunning = false
-		// Don't start observing yet, instead wait for explicit request.
-		// But at least view the most recent chat.
-		try {
-			const mostRecentChatID = await this.page.$eval("#_chat_list_body li",
-				element => window.__mautrixController.getChatListItemID(element.firstElementChild))
-			await this._switchChat(mostRecentChatID)
-		} catch (e) {
-			this.log("No chats available to focus on")
-		}
 		this.log("Login complete")
 	}
 
@@ -453,6 +445,39 @@ export default class MessagesPuppeteer {
 			() => window.__mautrixController.removeChatListObserver())
 		await this.page.evaluate(
 			() => window.__mautrixController.removeMsgListObserver())
+	}
+
+	async getOwnProfile() {
+		return await this.taskQueue.push(() => this._getOwnProfileUnsafe())
+	}
+
+	async _getOwnProfileUnsafe() {
+		// NOTE Will send a read receipt if a chat was in view!
+		//      Best to use this on startup when no chat is viewed.
+		let ownProfile
+		this.log("Opening settings view")
+		await this.page.click("button.mdGHD01SettingBtn")
+		await this.page.waitForSelector("#context_menu li#settings", {visible: true}).then(e => e.click())
+		await this.page.waitForSelector("#settings_contents", {visible: true})
+
+		this.log("Getting own profile info")
+		ownProfile = {
+			id: this.ownID,
+			name: await this.page.$eval("#settings_basic_name_input", e => e.innerText),
+			avatar: {
+				path: null,
+				url: await this.page.$eval(".mdCMN09ImgInput", e => {
+					const imgStr = e.style?.getPropertyValue("background-image")
+					const matches = imgStr.match(/url\("(blob:.*)"\)/)
+					return matches?.length == 2 ? matches[1] : null
+				}),
+			},
+		}
+
+		const backSelector = "#label_setting button"
+		await this.page.click(backSelector)
+		await this.page.waitForSelector(backSelector, {visible: false})
+		return ownProfile
 	}
 
 	_listItemSelector(id) {

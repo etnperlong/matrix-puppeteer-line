@@ -19,7 +19,7 @@ from base64 import b64decode
 import asyncio
 
 from .rpc import RPCClient
-from .types import ChatListInfo, ChatInfo, Message, Receipt, ImageData, StartStatus
+from .types import ChatListInfo, ChatInfo, ImageData, Message, Participant, Receipt, StartStatus
 
 
 class LoginCommand(TypedDict):
@@ -40,6 +40,9 @@ class Client(RPCClient):
 
     async def resume(self) -> None:
         await self.request("resume")
+
+    async def get_own_profile(self) -> Participant:
+        return Participant.deserialize(await self.request("get_own_profile"))
 
     async def get_chats(self) -> List[ChatListInfo]:
         resp = await self.request("get_chats")

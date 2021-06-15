@@ -102,9 +102,7 @@ class MautrixController {
 	}
 
 	setOwnID(ownID) {
-		// Remove characters that will conflict with mxid grammar
-		const suffix = ownID.slice(1).replace(":", "_ON_")
-		this.ownID = `_OWN_${suffix}`
+		this.ownID = ownID
 	}
 
 	// TODO Commonize with Node context
@@ -527,7 +525,7 @@ class MautrixController {
 	 * @typedef PathImage
 	 * @type object
 	 * @property {?string} path - The virtual path of the image (behaves like an ID). Optional.
-	 * @property {string} src   - The URL of the image. Mandatory.
+	 * @property {string} url   - The URL of the image. Mandatory.
 	 */
 
 	/**
