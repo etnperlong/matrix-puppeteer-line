@@ -525,6 +525,9 @@ export default class MessagesPuppeteer {
 			this.log("Waiting for detail area")
 			await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 
+			this.log("Waiting for chat to stabilize")
+			await this.page.evaluate(() => window.__mautrixController.waitForMessageListStability())
+
 			if (hadMsgListObserver) {
 				this.log("Restoring msg list observer")
 				await this.page.evaluate(

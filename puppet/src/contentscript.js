@@ -675,6 +675,49 @@ class MautrixController {
 	}
 
 	/**
+	 * Wait for updates to the active chat's message list to settle down.
+	 * Wait an additional bit of time every time an update is observed.
+	 * TODO Look (harder) for an explicit signal of when a chat is fully updated...
+	 *
+	 * @returns Promise<void>
+	 */
+	waitForMessageListStability() {
+		// Increase this if messages get missed on sync / chat change.
+		// Decrease it if response times are too slow.
+		const delayMillis = 2000
+
+		let myResolve
+		const promise = new Promise(resolve => {myResolve = resolve})
+
+		let observer
+		const onTimeout = () => {
+			console.log("Message list looks stable, continue")
+			console.debug(`timeoutID = ${timeoutID}`)
+			observer.disconnect()
+			myResolve()
+		}
+
+		let timeoutID
+		const startTimer = () => {
+			timeoutID = setTimeout(onTimeout, delayMillis)
+		}
+
+		observer = new MutationObserver(changes => {
+			clearTimeout(timeoutID)
+			console.log("CHANGE to message list detected! Wait a bit longer...")
+			console.debug(`timeoutID = ${timeoutID}`)
+			console.debug(changes)
+			startTimer()
+		})
+		observer.observe(
+			document.querySelector("#_chat_message_area"),
+			{childList: true, attributes: true, subtree: true})
+		startTimer()
+
+		return promise
+	}
+
+	/**
 	 * @param {[MutationRecord]} mutations - The mutation records that occurred
 	 * @private
 	 */
