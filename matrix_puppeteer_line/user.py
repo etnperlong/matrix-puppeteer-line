@@ -69,6 +69,14 @@ class User(DBUser, BaseUser):
             self.log.debug(f"Sending bridge notice: {text}")
             await self.az.intent.send_notice(self.notice_room, text)
 
+    @property
+    def own_id(self) -> str:
+        # Remove characters that will conflict with mxid grammar
+        return f"_OWN_{self.mxid[1:].replace(':', '_ON_')}"
+
+    async def get_own_puppet(self) -> 'pu.Puppet':
+        return await pu.Puppet.get_by_mid(self.own_id)
+
     async def is_logged_in(self) -> bool:
         try:
             return self.client and (await self.client.start()).is_logged_in
@@ -95,7 +103,7 @@ class User(DBUser, BaseUser):
 
     async def connect(self) -> None:
         self.loop.create_task(self.connect_double_puppet())
-        self.client = Client(self.mxid)
+        self.client = Client(self.mxid, self.own_id)
         self.log.debug("Starting client")
         await self.send_bridge_notice("Starting up...")
         state = await self.client.start()
@@ -126,6 +134,7 @@ class User(DBUser, BaseUser):
             self._connection_check_task.cancel()
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.pause()
+        await self.sync_own_profile()
         await self.client.set_last_message_ids(await DBMessage.get_max_mids())
         limit = self.config["bridge.initial_conversation_sync"]
         self.log.info("Syncing chats")
@@ -151,6 +160,12 @@ class User(DBUser, BaseUser):
         chat = await self.client.get_chat(chat_id, True)
         await portal.update_matrix_room(self, chat)
         await self.client.resume()
+
+    async def sync_own_profile(self) -> None:
+        self.log.info("Syncing own LINE profile info")
+        own_profile = await self.client.get_own_profile()
+        puppet = await self.get_own_puppet()
+        await puppet.update_info(own_profile, self.client)
 
     async def stop(self) -> None:
         # TODO Notices for shutdown messages

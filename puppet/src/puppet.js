@@ -36,12 +36,13 @@ export default class MessagesPuppeteer {
 	 * @param {string} id
 	 * @param {?Client} [client]
 	 */
-	constructor(id, client = null) {
+	constructor(id, ownID, client = null) {
 		let profilePath = path.join(MessagesPuppeteer.profileDir, id)
 		if (!profilePath.startsWith("/")) {
 			profilePath = path.join(process.cwd(), profilePath)
 		}
 		this.id = id
+		this.ownID = ownID
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
 		this.sentMessageIDs = new Set()
@@ -147,6 +148,18 @@ export default class MessagesPuppeteer {
 	}
 
 	/**
+	 * Set the contents of a text input field to the given text.
+	 * Works by triple-clicking the input field to select all existing text, to replace it on type.
+	 *
+	 * @param {ElementHandle} inputElement - The input element to type into.
+	 * @param {string} text                - The text to input.
+	 */
+	async _enterText(inputElement, text) {
+		await inputElement.click({clickCount: 3})
+		await inputElement.type(text)
+	}
+
+	/**
 	 * Wait for the session to be logged in and monitor changes while it's not.
 	 */
 	async waitForLogin(login_type, login_data) {
@@ -238,7 +251,7 @@ export default class MessagesPuppeteer {
 
 		this.log("Removing observers")
 		// TODO __mautrixController is undefined when cancelling, why?
-		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.id)
+		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.ownID)
 		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
 		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
@@ -274,15 +287,6 @@ export default class MessagesPuppeteer {
 
 		this.loginRunning = false
 		await this.blankPage.bringToFront()
-		// Don't start observing yet, instead wait for explicit request.
-		// But at least view the most recent chat.
-		try {
-			const mostRecentChatID = await this.page.$eval("#_chat_list_body li",
-				element => window.__mautrixController.getChatListItemID(element.firstElementChild))
-			await this._switchChat(mostRecentChatID)
-		} catch (e) {
-			this.log("No chats available to focus on")
-		}
 		this.log("Login complete")
 	}
 
@@ -464,6 +468,41 @@ export default class MessagesPuppeteer {
 			() => window.__mautrixController.removeMsgListObserver())
 	}
 
+	async getOwnProfile() {
+		return await this.taskQueue.push(() => this._getOwnProfileUnsafe())
+	}
+
+	async _getOwnProfileUnsafe() {
+		// NOTE Will send a read receipt if a chat was in view!
+		//      Best to use this on startup when no chat is viewed.
+		let ownProfile
+		await this._interactWithPage(async () => {
+			this.log("Opening settings view")
+			await this.page.click("button.mdGHD01SettingBtn")
+			await this.page.waitForSelector("#context_menu li#settings", {visible: true}).then(e => e.click())
+			await this.page.waitForSelector("#settings_contents", {visible: true})
+
+			this.log("Getting own profile info")
+			ownProfile = {
+				id: this.ownID,
+				name: await this.page.$eval("#settings_basic_name_input", e => e.innerText),
+				avatar: {
+					path: null,
+					url: await this.page.$eval(".mdCMN09ImgInput", e => {
+						const imgStr = e.style?.getPropertyValue("background-image")
+						const matches = imgStr.match(/url\("(blob:.*)"\)/)
+						return matches?.length == 2 ? matches[1] : null
+					}),
+				},
+			}
+
+			const backSelector = "#label_setting button"
+			await this.page.click(backSelector)
+			await this.page.waitForSelector(backSelector, {visible: false})
+		})
+		return ownProfile
+	}
+
 	_listItemSelector(id) {
 		return `#_chat_list_body div[data-chatid="${id}"]`
 	}
@@ -519,6 +558,9 @@ export default class MessagesPuppeteer {
 				this.log("Waiting for detail area")
 				await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			})
+
+			this.log("Waiting for chat to stabilize")
+			await this.page.evaluate(() => window.__mautrixController.waitForMessageListStability())
 
 			if (hadMsgListObserver) {
 				this.log("Restoring msg list observer")
@@ -595,8 +637,11 @@ export default class MessagesPuppeteer {
 
 		const input = await this.page.$("#_chat_room_input")
 		await this._interactWithPage(async () => {
+			// Live-typing in the field can have its text mismatch what was requested!!
+			// Probably because the input element is a div instead of a real text input...ugh!
+			// Setting its innerText directly works fine though...
 			await input.click()
-			await input.type(text)
+			await input.evaluate((e, text) => e.innerText = text, text)
 			await input.press("Enter")
 		})
 
@@ -808,18 +853,8 @@ export default class MessagesPuppeteer {
 
 	async _sendEmailCredentials() {
 		this.log("Inputting login credentials")
-
-		// Triple-click input fields to select all existing text and replace it on type
-		let input
-
-		input = await this.page.$("#line_login_email")
-		await input.click({clickCount: 3})
-		await input.type(this.login_email)
-
-		input = await this.page.$("#line_login_pwd")
-		await input.click({clickCount: 3})
-		await input.type(this.login_password)
-
+		await this._enterText(await this.page.$("#line_login_email"), this.login_email)
+		await this._enterText(await this.page.$("#line_login_pwd"), this.login_password)
 		await this.page.click("button#login_btn")
 	}
 

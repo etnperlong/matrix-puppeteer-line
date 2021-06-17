@@ -192,9 +192,7 @@ class Portal(DBPortal, BasePortal):
 
     async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
                                      invite: bool = True) -> Optional[IntentAPI]:
-        # Use bridge bot as puppet for own user when puppet for own user is unavailable
-        # TODO Use own LINE puppet instead, and create it if it's not available yet
-        intent = sender.intent if sender else self.az.intent
+        intent = sender.intent if sender else (await source.get_own_puppet()).intent
         if self.is_direct and (sender is None or sender.mid == source.mid and not sender.is_real_user):
             if self.invite_own_puppet_to_pm and invite:
                 try:
@@ -228,7 +226,7 @@ class Portal(DBPortal, BasePortal):
                 if not self.invite_own_puppet_to_pm:
                     self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
                     return
-                sender = p.Puppet.get_by_mid(evt.sender.id) if not self.is_direct else None
+                sender = await p.Puppet.get_by_mid(evt.sender.id) if evt.sender else None
                 intent = await self._bridge_own_message_pm(source, sender, f"message {evt.id}")
                 if not intent:
                     return
@@ -552,11 +550,12 @@ class Portal(DBPortal, BasePortal):
                 continue
 
             mid = p.Puppet.get_id_from_mxid(user_id)
-            if mid and mid not in current_members:
+            is_own_puppet = p.Puppet.is_mid_for_own_puppet(mid)
+            if mid and mid not in current_members and not is_own_puppet:
                 print(mid)
                 await self.main_intent.kick_user(self.mxid, user_id,
                                                  reason="User had left this chat")
-            elif forbid_own_puppets and p.Puppet.is_mid_for_own_puppet(mid):
+            elif forbid_own_puppets and is_own_puppet:
                 await self.main_intent.kick_user(self.mxid, user_id,
                                                  reason="Kicking own puppet")
 

@@ -40,10 +40,11 @@ class RPCClient:
     _response_waiters: Dict[int, asyncio.Future]
     _event_handlers: Dict[str, List[EventHandler]]
 
-    def __init__(self, user_id: UserID) -> None:
+    def __init__(self, user_id: UserID, own_id: str) -> None:
         self.log = self.log.getChild(user_id)
         self.loop = asyncio.get_running_loop()
         self.user_id = user_id
+        self.own_id = own_id
         self._req_id = 0
         self._min_broadcast_id = 0
         self._event_handlers = {}
@@ -67,7 +68,9 @@ class RPCClient:
         self._writer = w
         self.loop.create_task(self._try_read_loop())
         self.loop.create_task(self._command_loop())
-        await self.request("register", user_id=self.user_id)
+        await self.request("register",
+                           user_id=self.user_id,
+                           own_id = self.own_id)
 
     async def disconnect(self) -> None:
         self._writer.write_eof()
