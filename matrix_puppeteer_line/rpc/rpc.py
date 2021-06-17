@@ -33,6 +33,7 @@ class RPCClient:
     log: TraceLogger = logging.getLogger("mau.rpc")
 
     user_id: UserID
+    ephemeral_events: bool
     _reader: Optional[asyncio.StreamReader]
     _writer: Optional[asyncio.StreamWriter]
     _req_id: int
@@ -40,11 +41,12 @@ class RPCClient:
     _response_waiters: Dict[int, asyncio.Future]
     _event_handlers: Dict[str, List[EventHandler]]
 
-    def __init__(self, user_id: UserID, own_id: str) -> None:
+    def __init__(self, user_id: UserID, own_id: str, ephemeral_events: bool) -> None:
         self.log = self.log.getChild(user_id)
         self.loop = asyncio.get_running_loop()
         self.user_id = user_id
         self.own_id = own_id
+        self.ephemeral_events = ephemeral_events
         self._req_id = 0
         self._min_broadcast_id = 0
         self._event_handlers = {}
@@ -70,7 +72,8 @@ class RPCClient:
         self.loop.create_task(self._command_loop())
         await self.request("register",
                            user_id=self.user_id,
-                           own_id = self.own_id)
+                           own_id = self.own_id,
+                           ephemeral_events=self.ephemeral_events)
 
     async def disconnect(self) -> None:
         self._writer.write_eof()

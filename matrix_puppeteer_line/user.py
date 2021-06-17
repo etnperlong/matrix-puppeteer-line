@@ -103,7 +103,7 @@ class User(DBUser, BaseUser):
 
     async def connect(self) -> None:
         self.loop.create_task(self.connect_double_puppet())
-        self.client = Client(self.mxid, self.own_id)
+        self.client = Client(self.mxid, self.own_id, self.config["appservice.ephemeral_events"])
         self.log.debug("Starting client")
         await self.send_bridge_notice("Starting up...")
         state = await self.client.start()

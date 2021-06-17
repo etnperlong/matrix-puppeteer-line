@@ -245,12 +245,17 @@ class Portal(DBPortal, BasePortal):
         if is_preseen:
             msg = await DBMessage.get_next_noid_msg(self.mxid)
             if msg:
-                self.log.debug(f"Found ID {evt.id} of preseen message in chat {self.mxid} {msg.mxid}")
-                msg.mid = evt.id
-                event_id = msg.mxid
+                self.log.debug(f"Found ID {evt.id} of preseen message in chat {self.mxid}: {msg.mxid}")
+                prev_event_id = msg.mxid
             else:
                 self.log.error(f"Could not find an existing event for a message with no ID in chat {self.mxid}")
                 return
+        else:
+            prev_event_id = None
+
+        if is_preseen and evt.html:
+            # No need to update a previewed text message, as their previews are accurate
+            event_id = prev_event_id
         elif evt.image and evt.image.url:
             if not evt.image.is_sticker or self.config["bridge.receive_stickers"]:
                 media_info = await self._handle_remote_media(
@@ -268,9 +273,11 @@ class Portal(DBPortal, BasePortal):
             else:
                 media_info = None
             send_sticker = self.config["bridge.use_sticker_events"] and evt.image.is_sticker and not self.encrypted and media_info
-            if send_sticker:
-                event_id = await intent.send_sticker(
-                    self.mxid, media_info.mxc, image_info, "<sticker>", timestamp=evt.timestamp)
+            # TODO Element Web messes up text->sticker edits!!
+            #      File a case on it
+            if send_sticker and not prev_event_id:
+                #relates_to = RelatesTo(rel_type=RelationType.REPLACE, event_id=prev_event_id) if prev_event_id else None
+                event_id = await intent.send_sticker(self.mxid, media_info.mxc, image_info, "<sticker>", timestamp=evt.timestamp)
             else:
                 if media_info:
                     content = MediaMessageEventContent(
@@ -282,8 +289,11 @@ class Portal(DBPortal, BasePortal):
                     content = TextMessageEventContent(
                         msgtype=MessageType.NOTICE,
                         body=f"<{'sticker' if evt.image.is_sticker else 'image'}>")
+                if prev_event_id:
+                    content.set_edit(prev_event_id)
                 event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
         elif evt.html and not evt.html.isspace():
+
             chunks = []
 
             def handle_data(data):
@@ -347,6 +357,8 @@ class Portal(DBPortal, BasePortal):
             content = TextMessageEventContent(
                 msgtype=MessageType.NOTICE,
                 body="<Unbridgeable message>")
+            if prev_event_id:
+                content.set_edit(prev_event_id)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
 
         if evt.is_outgoing and evt.receipt_count:
@@ -361,7 +373,7 @@ class Portal(DBPortal, BasePortal):
             except UniqueViolationError as e:
                 self.log.debug(f"Failed to handle remote message {evt.id or 'with no ID'} -> {event_id}: {e}")
         else:
-            await msg.update()
+            await msg.update_ids(new_mxid=event_id, new_mid=evt.id)
             self.log.debug(f"Handled preseen remote message {evt.id} -> {event_id}")
 
     async def handle_remote_receipt(self, receipt: Receipt) -> None:

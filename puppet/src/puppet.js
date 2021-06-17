@@ -36,13 +36,14 @@ export default class MessagesPuppeteer {
 	 * @param {string} id
 	 * @param {?Client} [client]
 	 */
-	constructor(id, ownID, client = null) {
+	constructor(id, ownID, sendPlaceholders, client = null) {
 		let profilePath = path.join(MessagesPuppeteer.profileDir, id)
 		if (!profilePath.startsWith("/")) {
 			profilePath = path.join(process.cwd(), profilePath)
 		}
 		this.id = id
 		this.ownID = ownID
+		this.sendPlaceholders = sendPlaceholders
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
 		this.sentMessageIDs = new Set()
@@ -764,24 +765,28 @@ export default class MessagesPuppeteer {
 		const diffNumNotifications = chatListInfo.notificationCount - prevNumNotifications
 
 		if (chatListInfo.notificationCount == 0 && diffNumNotifications < 0) {
-			// Message was read from another LINE client, so there's no new info to bridge.
-			// But if the diff == 0, it's an own message sent from LINE, and must bridge it!
+			this.log("Notifications dropped--must have read messages from another LINE client, skip")
 			this.numChatNotifications.set(chatID, 0)
 			return
 		}
 
 		const mustSync =
 			// Can only use previews for DMs, because sender can't be found otherwise!
+			// TODO For non-DMs, send fake messages from bridgebot and delete them.
 			   chatListInfo.id.charAt(0) != 'u'
-			|| diffNumNotifications > 1
-			// Sync when lastMsg is a canned message for a non-previewable message type.
-			|| chatListInfo.lastMsg.endsWith(" sent a photo.")
-			|| chatListInfo.lastMsg.endsWith(" sent a sticker.")
-			|| chatListInfo.lastMsg.endsWith(" sent a location.")
-			// TODO More?
-		// TODO With MSC2409, only sync if >1 new messages arrived,
-		//      or if message is unpreviewable.
-		//      Otherwise, send a dummy notice & sync when its read.
+			// If >1, a notification was missed. Only way to get them is to view the chat.
+			// If == 0, might be own message...or just a shuffled chat, or something else.
+			// To play it safe, just sync them. Should be no harm, as they're viewed already.
+			|| diffNumNotifications != 1
+			// Without placeholders, some messages require visiting their chat to be synced.
+			|| !this.sendPlaceholders
+			&& (
+				// Sync when lastMsg is a canned message for a non-previewable message type.
+				   chatListInfo.lastMsg.endsWith(" sent a photo.")
+				|| chatListInfo.lastMsg.endsWith(" sent a sticker.")
+				|| chatListInfo.lastMsg.endsWith(" sent a location.")
+				// TODO More?
+			)
 
 		let messages
 		if (!mustSync) {
@@ -789,7 +794,7 @@ export default class MessagesPuppeteer {
 				chat_id: chatListInfo.id,
 				id: null, // because sidebar messages have no ID
 				timestamp: null, // because this message was sent right now
-				is_outgoing: chatListInfo.notificationCount == 0,
+				is_outgoing: false, // because there's no reliable way to detect own messages...
 				sender: null, // because only DM messages are handled
 				html: chatListInfo.lastMsg,
 			}]

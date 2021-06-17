@@ -164,7 +164,7 @@ export default class Client {
 		let started = false
 		if (this.puppet === null) {
 			this.log("Opening new puppeteer for", this.userID)
-			this.puppet = new MessagesPuppeteer(this.userID, this.ownID, this)
+			this.puppet = new MessagesPuppeteer(this.userID, this.ownID, this.sendPlaceholders, this)
 			this.manager.puppets.set(this.userID, this.puppet)
 			await this.puppet.start(!!req.debug)
 			started = true
@@ -195,7 +195,8 @@ export default class Client {
 	handleRegister = async (req) => {
 		this.userID = req.user_id
 		this.ownID = req.own_id
-		this.log(`Registered socket ${this.connID} -> ${this.userID}`)
+		this.sendPlaceholders = req.ephemeral_events
+		this.log(`Registered socket ${this.connID} -> ${this.userID}${!this.sendPlaceholders ? "" : " (with placeholder message support)"}`)
 		if (this.manager.clients.has(this.userID)) {
 			const oldClient = this.manager.clients.get(this.userID)
 			this.manager.clients.set(this.userID, this)

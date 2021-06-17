@@ -36,10 +36,11 @@ class Message:
         q = "INSERT INTO message (mxid, mx_room, mid, chat_id) VALUES ($1, $2, $3, $4)"
         await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id)
 
-    async def update(self) -> None:
-        q = ("UPDATE message SET mid=$3, chat_id=$4 "
-             "WHERE mxid=$1 AND mx_room=$2")
-        await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id)
+    async def update_ids(self, new_mxid: EventID, new_mid: int) -> None:
+        q = ("UPDATE message SET mxid=$1, mid=$2 "
+             "WHERE mxid=$3 AND mx_room=$4 AND chat_id=$5")
+        await self.db.execute(q, new_mxid, new_mid,
+                              self.mxid, self.mx_room, self.chat_id)
 
     @classmethod
     async def get_max_mid(cls, room_id: RoomID) -> int:

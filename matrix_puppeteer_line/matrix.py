@@ -66,8 +66,12 @@ class MatrixHandler(BaseMatrixHandler):
     async def handle_read_receipt(self, user: 'u.User', portal: 'po.Portal', event_id: EventID,
                                   data: SingleReceiptEventContent) -> None:
         # When reading a bridged message, view its chat in LINE, to make it send a read receipt.
+
+        # TODO Use *null* mids for last messages in a chat!!
         # Only visit a LINE chat when its LAST bridge message has been read,
         # because LINE lacks per-message read receipts--it's all or nothing!
-        if await DBMessage.is_last_by_mxid(event_id, portal.mxid):
-            # Viewing a chat by updating it whole-hog, lest a ninja arrives
-            await user.sync_portal(portal)
+        # TODO Also view if message is non-last but for media, so it can be loaded.
+        #if await DBMessage.is_last_by_mxid(event_id, portal.mxid):
+
+        # Viewing a chat by updating it whole-hog, lest a ninja arrives
+        await user.sync_portal(portal)

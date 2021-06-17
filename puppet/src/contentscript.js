@@ -740,19 +740,17 @@ class MautrixController {
 				for (const node of change.addedNodes) {
 				}
 				*/
-			} else if (change.target.tagName == "LI") {
+			} else if (change.target.tagName == "LI" && change.addedNodes.length == 1) {
 				if (change.target.classList.contains("ExSelected")) {
 					console.debug("Not using chat list mutation response for currently-active chat")
 					continue
 				}
-				for (const node of change.addedNodes) {
-					const chat = this.parseChatListItem(node)
-					if (chat) {
-						console.log("Added chat list item:", chat)
-						changedChats.add(chat)
-					} else {
-						console.debug("Could not parse added node as a chat list item:", node)
-					}
+				const chat = this.parseChatListItem(change.addedNodes[0])
+				if (chat) {
+					console.log("Added chat list item:", chat)
+					changedChats.add(chat)
+				} else {
+					console.debug("Could not parse added node as a chat list item:", node)
 				}
 			}
 			// change.removedNodes tells you which chats that had notifications are now read.
