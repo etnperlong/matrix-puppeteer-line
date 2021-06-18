@@ -100,4 +100,5 @@ class Message:
     async def delete_all_noid_msgs(cls, room_id: RoomID) -> None:
         status = await cls.db.execute("DELETE FROM message "
                                       "WHERE mid IS NULL AND mx_room=$1", room_id)
-        return int(status.removeprefix("DELETE "))
+        # Skip leading "DELETE "
+        return int(status[7:])
