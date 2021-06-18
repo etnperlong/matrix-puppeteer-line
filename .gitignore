@@ -1,4 +1,6 @@
 /.idea/
+/.*project
+/.settings/
 
 /.venv
 /env/
@@ -13,8 +15,8 @@ __pycache__
 profiles
 puppet/extension_files
 
-/config.yaml
-/registration.yaml
+/config*.yaml
+/registration*.yaml
 *.log*
 *.db
 *.pickle
