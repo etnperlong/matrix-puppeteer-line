@@ -190,10 +190,10 @@ class Portal(DBPortal, BasePortal):
                       f"cleaning up and deleting...")
         await self.cleanup_and_delete()
 
-    async def _bridge_own_message_pm(self, source: 'u.User', sender: Optional['p.Puppet'], mid: str,
+    async def _bridge_own_message_pm(self, source: 'u.User', puppet: Optional['p.Puppet'], mid: str,
                                      invite: bool = True) -> Optional[IntentAPI]:
-        intent = sender.intent if sender else (await source.get_own_puppet()).intent
-        if self.is_direct and (sender is None or sender.mid == source.mid and not sender.is_real_user):
+        intent = puppet.intent if puppet else (await source.get_own_puppet()).intent
+        if self.is_direct and (not puppet or puppet.mid == source.mid and not puppet.is_real_user):
             if self.invite_own_puppet_to_pm and invite:
                 try:
                     await intent.ensure_joined(self.mxid)
@@ -216,44 +216,54 @@ class Portal(DBPortal, BasePortal):
             self.log.debug(f"Ignoring duplicate message {evt.id}")
             return
 
-        is_preseen = evt.id != None and await DBMessage.get_num_noid_msgs(self.mxid) > 0
-
         if evt.is_outgoing:
             if source.intent:
-                sender = None
                 intent = source.intent
             else:
                 if not self.invite_own_puppet_to_pm:
                     self.log.warning(f"Ignoring message {evt.id}: double puppeting isn't enabled")
                     return
-                sender = await p.Puppet.get_by_mid(evt.sender.id) if evt.sender else None
-                intent = await self._bridge_own_message_pm(source, sender, f"message {evt.id}")
+                puppet = await p.Puppet.get_by_mid(evt.sender.id) if evt.sender else None
+                intent = await self._bridge_own_message_pm(source, puppet, f"message {evt.id}")
                 if not intent:
                     return
         else:
-            sender = await p.Puppet.get_by_mid(self.other_user if self.is_direct else evt.sender.id)
-            # TODO Respond to name/avatar changes of users in a DM
-            if not self.is_direct:
-                if sender:
-                    await sender.update_info(evt.sender, source.client)
+            if self.is_direct:
+                # TODO Respond to name/avatar changes of users in a DM
+                intent = (await p.Puppet.get_by_mid(self.other_user)).intent
+            elif evt.sender:
+                puppet = await p.Puppet.get_by_mid(evt.sender.id)
+                if puppet:
+                    await puppet.update_info(evt.sender, source.client)
                 else:
-                    self.log.warning(f"Could not find ID of LINE user who sent event {evt.id or 'with no ID'}")
-                    sender = await p.Puppet.get_by_profile(evt.sender, source.client)
-            intent = sender.intent
+                    self.log.warning(f"Could not find ID of LINE user who sent message {evt.id or 'with no ID'}")
+                    puppet = await p.Puppet.get_by_profile(evt.sender, source.client)
+                intent = puppet.intent
+            else:
+                self.log.info(f"Using bridgebot for unknown sender of message {evt.id or 'with no ID'}")
+                intent = self.az.intent
             await intent.ensure_joined(self.mxid)
 
-        if is_preseen:
+        if evt.id:
             msg = await DBMessage.get_next_noid_msg(self.mxid)
-            if msg:
-                self.log.debug(f"Found ID {evt.id} of preseen message in chat {self.mxid}: {msg.mxid}")
-                prev_event_id = msg.mxid
+            if not msg:
+                self.log.info(f"Handling new message {evt.id} in chat {self.mxid}")
+                prev_event_id = None
             else:
-                self.log.error(f"Could not find an existing event for a message with no ID in chat {self.mxid}")
-                return
+                self.log.info(f"Handling preseen message {evt.id} in chat {self.mxid}: {msg.mxid}")
+                if not self.is_direct:
+                    # Non-DM previews are always sent by bridgebot.
+                    # Must delete the bridgebot message and send a new message from the correct puppet.
+                    await self.az.intent.redact(self.mxid, msg.mxid, "Found actual sender")
+                    prev_event_id = None
+                else:
+                    prev_event_id = msg.mxid
         else:
+            self.log.info(f"Handling new message with no ID in chat {self.mxid}")
+            msg = None
             prev_event_id = None
 
-        if is_preseen and evt.html:
+        if prev_event_id and evt.html:
             # No need to update a previewed text message, as their previews are accurate
             event_id = prev_event_id
         elif evt.image and evt.image.url:
@@ -364,7 +374,7 @@ class Portal(DBPortal, BasePortal):
         if evt.is_outgoing and evt.receipt_count:
             await self._handle_receipt(event_id, evt.receipt_count)
 
-        if not is_preseen:
+        if not msg:
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
             try:
                 await msg.insert()

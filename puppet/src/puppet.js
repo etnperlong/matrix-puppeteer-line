@@ -771,18 +771,17 @@ export default class MessagesPuppeteer {
 		}
 
 		const mustSync =
-			// Can only use previews for DMs, because sender can't be found otherwise!
-			// TODO For non-DMs, send fake messages from bridgebot and delete them.
-			   chatListInfo.id.charAt(0) != 'u'
 			// If >1, a notification was missed. Only way to get them is to view the chat.
 			// If == 0, might be own message...or just a shuffled chat, or something else.
 			// To play it safe, just sync them. Should be no harm, as they're viewed already.
-			|| diffNumNotifications != 1
+			   diffNumNotifications != 1
 			// Without placeholders, some messages require visiting their chat to be synced.
 			|| !this.sendPlaceholders
 			&& (
+				// Can only use previews for DMs, because sender can't be found otherwise!
+				   chatListInfo.id.charAt(0) != 'u'
 				// Sync when lastMsg is a canned message for a non-previewable message type.
-				   chatListInfo.lastMsg.endsWith(" sent a photo.")
+				|| chatListInfo.lastMsg.endsWith(" sent a photo.")
 				|| chatListInfo.lastMsg.endsWith(" sent a sticker.")
 				|| chatListInfo.lastMsg.endsWith(" sent a location.")
 				// TODO More?
@@ -795,7 +794,7 @@ export default class MessagesPuppeteer {
 				id: null, // because sidebar messages have no ID
 				timestamp: null, // because this message was sent right now
 				is_outgoing: false, // because there's no reliable way to detect own messages...
-				sender: null, // because only DM messages are handled
+				sender: null, // because there's no way to tell who sent a message
 				html: chatListInfo.lastMsg,
 			}]
 			this.numChatNotifications.set(chatID, chatListInfo.notificationCount)
