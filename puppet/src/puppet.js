@@ -27,7 +27,7 @@ export default class MessagesPuppeteer {
 	static executablePath = undefined
 	static devtools = false
 	static noSandbox = false
-	static viewport = { width: 960, height: 880 }
+	static viewport = { width: 960, height: 840 }
 	static url = undefined
 	static extensionDir = "extension_files"
 
@@ -68,18 +68,19 @@ export default class MessagesPuppeteer {
 	async start() {
 		this.log("Launching browser")
 
-		let extensionArgs = [
+		const args = [
 			`--disable-extensions-except=${MessagesPuppeteer.extensionDir}`,
-			`--load-extension=${MessagesPuppeteer.extensionDir}`
+			`--load-extension=${MessagesPuppeteer.extensionDir}`,
+			`--window-size=${MessagesPuppeteer.viewport.width},${MessagesPuppeteer.viewport.height+120}`,
 		]
 		if (MessagesPuppeteer.noSandbox) {
-			extensionArgs = extensionArgs.concat(`--no-sandbox`)
+			args = args.concat(`--no-sandbox`)
 		}
 
 		this.browser = await puppeteer.launch({
 			executablePath: MessagesPuppeteer.executablePath,
 			userDataDir: this.profilePath,
-			args: extensionArgs,
+			args: args,
 			headless: false, // Needed to load extensions
 			defaultViewport: MessagesPuppeteer.viewport,
 			devtools: MessagesPuppeteer.devtools,
