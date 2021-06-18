@@ -426,7 +426,7 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
 	 */
 	async getMessages(chatID) {
-		return await this.taskQueue.push(async () => this._getMessagesUnsafe(chatID))
+		return await this.taskQueue.push(() => this._getMessagesUnsafe(chatID))
 	}
 
 	setLastMessageIDs(ids) {

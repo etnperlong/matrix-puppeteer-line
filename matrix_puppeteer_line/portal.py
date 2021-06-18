@@ -182,8 +182,8 @@ class Portal(DBPortal, BasePortal):
         if not msg and self.config["bridge.delivery_error_reports"]:
             await self.main_intent.send_notice(
                 self.mxid,
-               "Posting this message to LINE may have failed.",
-               relates_to=RelatesTo(rel_type=RelationType.REPLY, event_id=event_id))
+                "Posting this message to LINE may have failed.",
+                relates_to=RelatesTo(rel_type=RelationType.REPLY, event_id=event_id))
 
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
