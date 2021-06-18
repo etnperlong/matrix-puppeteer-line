@@ -539,13 +539,25 @@ export default class MessagesPuppeteer {
 			this.log(hadMsgListObserver ? "Observer was already removed" : "Removed observer")
 
 			await this._interactWithPage(async () => {
-				this.log(`Clicking chat list item`)
-				chatListItem.click()
-				this.log(`Waiting for chat header title to be "${chatName}"`)
-				await this.page.waitForFunction(
-					isCorrectChatVisible,
-					{polling: "mutation"},
-					chatName)
+				let numTries = 3
+				while (true) {
+					try {
+						this.log("Clicking chat list item")
+						chatListItem.click()
+						this.log(`Waiting for chat header title to be "${chatName}"`)
+						await this.page.waitForFunction(
+							isCorrectChatVisible,
+							{polling: "mutation", timeout: 1000},
+							chatName)
+						break
+					} catch (e) {
+						if (--numTries == 0) {
+							throw e
+						} else {
+							this.log("Clicking chat list item didn't work...try again")
+						}
+					}
+				}
 
 				// Always show the chat details sidebar, as this makes life easier
 				this.log("Waiting for detail area to be auto-hidden upon entering chat")
@@ -560,8 +572,15 @@ export default class MessagesPuppeteer {
 				await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
 			})
 
-			this.log("Waiting for chat to stabilize")
-			await this.page.evaluate(() => window.__mautrixController.waitForMessageListStability())
+			this.log("Waiting for any item to appear in chat")
+			try {
+				await this.page.waitForSelector("#_chat_room_msg_list div", {timeout: 2000})
+
+				this.log("Waiting for chat to stabilize")
+				await this.page.evaluate(() => window.__mautrixController.waitForMessageListStability())
+			} catch (e) {
+				this.log("No messages in chat found. Maybe no messages were ever sent yet?")
+			}
 
 			if (hadMsgListObserver) {
 				this.log("Restoring msg list observer")

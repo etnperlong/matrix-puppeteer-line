@@ -691,7 +691,7 @@ class MautrixController {
 	waitForMessageListStability() {
 		// Increase this if messages get missed on sync / chat change.
 		// Decrease it if response times are too slow.
-		const delayMillis = 2000
+		const delayMillis = 500
 
 		let myResolve
 		const promise = new Promise(resolve => {myResolve = resolve})
