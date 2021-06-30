@@ -17,8 +17,8 @@
 // Definitions and docs for methods that the Puppeteer script exposes for the content script
 /**
  * @param {string} text - The date string to parse
- * @param {Date} [ref] - Reference date to parse relative times
- * @param {{[forwardDate]: boolean}} [option] - Extra options for parser
+ * @param {?Date} ref   - Reference date to parse relative times
+ * @param {?{forwardDate: boolean}} option - Extra options for parser
  * @return {Promise<Date>}
  */
 window.__chronoParseDate = function (text, ref, option) {}
@@ -38,13 +38,13 @@ window.__mautrixReceiveMessages = function (chatID, messages) {}
  * @param {string} receipt_id - The ID of the most recently-read message for the current chat.
  * @return {Promise<void>}
  */
-window.__mautrixReceiveReceiptDirectLatest = function (chatID, receipt_id) {}
+window.__mautrixReceiveReceiptDirectLatest = function (chatID, receiptID) {}
 /**
  * @param {string} chatID - The ID of the chat whose receipts are being processed.
- * @param {[Receipt]} receipts - All newly-seen receipts for the current chat.
+ * @param {Receipt[]} receipts - All newly-seen receipts for the current chat.
  * @return {Promise<void>}
  */
-window.__mautrixReceiveReceiptMulti = function (chat_id, receipts) {}
+window.__mautrixReceiveReceiptMulti = function (chatID, receipts) {}
 /**
  * @param {string} url - The URL for the QR code.
  * @return {Promise<void>}
@@ -123,8 +123,8 @@ class MautrixController {
 	 * Parse a date string.
 	 *
 	 * @param {string} text - The string to parse
-	 * @param {Date} [ref] - Reference date to parse relative times
-	 * @param {{[forwardDate]: boolean}} [option] - Extra options for parser
+	 * @param {?Date} ref   - Reference date to parse relative times
+	 * @param {?{forwardDate: boolean}} option - Extra options for parser
 	 * @return {Promise<?Date>} - The date, or null if parsing failed.
 	 * @private
 	 */
@@ -175,7 +175,7 @@ class MautrixController {
 	 * @property {?Participant} sender - Full data of the participant who sent the message, if needed and available.
 	 * @property {?string} html        - The HTML format of the message, if necessary.
 	 * @property {?ImageInfo} image    - Information of the image in the message, if it's an image-only message.
-	 * @property {?int} receipt_count  - The number of users who have read the message.
+	 * @property {?number} receipt_count  - The number of users who have read the message.
 	 */
 
 	/**
@@ -203,7 +203,7 @@ class MautrixController {
 	 * Parse a message element.
 	 *
 	 * @param {Element} element - The message element.
-	 * @param {Number} chatType - What kind of chat this message is part of.
+	 * @param {number} chatType - What kind of chat this message is part of.
 	 * @param {Date} refDate    - The most recent date indicator. If undefined, do not retrieve the timestamp of this message.
 	 * @return {Promise<MessageData>}
 	 * @private
@@ -345,7 +345,7 @@ class MautrixController {
 	/**
 	 * @param {Element} element
 	 * @param {Element} msgSpan
-	 * @param {Number} timeoutLimitMillis
+	 * @param {number} timeoutLimitMillis
 	 * @return {Promise<Element>}
 	 * @private
 	 */
@@ -404,7 +404,7 @@ class MautrixController {
 
 	/**
 	 * @param {Element} img
-	 * @param {Number} timeoutLimitMillis
+	 * @param {number} timeoutLimitMillis
 	 * @return {Promise<Element>}
 	 * @private
 	 */
@@ -455,7 +455,7 @@ class MautrixController {
 	 * Accepts selectors for elements that become visible once the message
 	 * has succeeded or failed to be sent.
 	 *
-	 * @param {int} timeoutLimitMillis - The maximum amount of time to wait for the message to be sent.
+	 * @param {number} timeoutLimitMillis - The maximum amount of time to wait for the message to be sent.
 	 * @param {string} successSelector - The selector for the element that indicates the message was sent.
 	 * @param {?string} failureSelector - The selector for the element that indicates the message failed to be sent.
 	 */
@@ -478,7 +478,7 @@ class MautrixController {
 	/**
 	 * Wait for a user-sent message to finish getting sent.
 	 *
-	 * @return {Promise<int>} - The ID of the sent message.
+	 * @return {Promise<number>} - The ID of the sent message.
 	 */
 	async waitForOwnMessage() {
 		return this.ownMsgPromise ? await this.ownMsgPromise : -1
@@ -494,8 +494,8 @@ class MautrixController {
 	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
-	 * @param {int} minID - The minimum message ID to consider.
-	 * @return {Promise<[MessageData]>} - A list of messages.
+	 * @param {?number} minID - The minimum message ID to consider.
+	 * @return {Promise<MessageData[]>} - A list of messages.
 	 */
 	async parseMessageList(minID = 0) {
 		console.debug(`minID for full refresh: ${minID}`)
@@ -629,7 +629,7 @@ class MautrixController {
 	 * TODO Find what works for a *room* participants list...!
 	 *
 	 * @param {Element} element - The participant list element.
-	 * @return {[Participant]} - The list of participants.
+	 * @return {Participant[]} - The list of participants.
 	 */
 	parseParticipantList(element) {
 		// TODO Might need to explicitly exclude own user if double-puppeting is enabled.
@@ -729,7 +729,7 @@ class MautrixController {
 	/**
 	 * Parse the list of recent/saved chats.
 	 *
-	 * @return {[ChatListInfo]} - The list of chats.
+	 * @return {ChatListInfo[]} - The list of chats.
 	 */
 	parseChatList() {
 		const chatList = document.querySelector("#_chat_list_body")
@@ -824,7 +824,7 @@ class MautrixController {
 	}
 
 	/**
-	 * @param {[MutationRecord]} mutations - The mutation records that occurred
+	 * @param {MutationRecord[]} mutations - The mutation records that occurred
 	 * @private
 	 */
 	_observeChatListMutations(mutations) {
@@ -933,7 +933,7 @@ class MautrixController {
 	}
 
 	/**
-	 * @param {[MutationRecord]} mutations - The mutation records that occurred
+	 * @param {MutationRecord[]} mutations - The mutation records that occurred
 	 * @param {string} chatID - The ID of the chat being observed.
 	 * @private
 	 */
@@ -971,26 +971,26 @@ class MautrixController {
 	 * @type object
 	 *
 	 * @property {Promise<MessageData>} promise
-	 * @property {Number} id
+	 * @property {number} id
 	 */
 
 	/**
 	 * @typedef SameIDMsgs
 	 * @type object
 	 *
-	 * @property {Number} id
+	 * @property {number} id
 	 * @property {PendingMessage[]} msgs
 	 * @property {Function} resolve
-	 * @property {Number} numRejected
+	 * @property {number} numRejected
 	 */
 
 	/**
 	 * Binary search for the array of messages with the provided ID.
 	 *
 	 * @param {SameIDMsgs[]} sortedSameIDMsgs
-	 * @param {Number} id
+	 * @param {number} id
 	 * @param {boolean} returnClosest - If true, return the index of the nearest result on miss instead of -1.
-	 * @return {Number} The index of the matched element, or -1 if not found.
+	 * @return {number} The index of the matched element, or -1 if not found.
 	 */
 	_findMsgsForID(
 		sortedSameIDMsgs, id, returnClosest = false,
@@ -1047,7 +1047,7 @@ class MautrixController {
 	 * Add a mutation observer to the message list of the current chat.
 	 * Used for observing new messages & read receipts.
 	 *
-	 * @param {int} minID - The minimum message ID to consider.
+	 * @param {?number} minID - The minimum message ID to consider.
 	 */
 	addMsgListObserver(minID = 0) {
 		const chat_room_msg_list = document.querySelector("#_chat_room_msg_list")
