@@ -72,20 +72,22 @@ async def upgrade_media(conn: Connection) -> None:
 
 @upgrade_table.register(description="Helpful table constraints")
 async def upgrade_table_constraints(conn: Connection) -> None:
-    constraint_name = "portal_mxid_key"
+    table_name = "portal"
+    constraint_name = f"{table_name}_mxid_key"
     q = ( "SELECT EXISTS(SELECT FROM information_schema.constraint_table_usage "
-         f"WHERE table_name='portal' AND constraint_name='{constraint_name}')")
-    has_unique_mxid = await conn.fetchval(q)
-    if not has_unique_mxid:
-        await conn.execute(f"ALTER TABLE portal ADD CONSTRAINT {constraint_name} UNIQUE(mxid)")
+         f"WHERE table_name='{table_name}' AND constraint_name='{constraint_name}')")
+    has_constraint = await conn.fetchval(q)
+    if not has_constraint:
+        await conn.execute(f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} UNIQUE(mxid)")
 
-    constraint_name = "message_chat_id_fkey"
+    table_name = "message"
+    constraint_name = f"{table_name}_chat_id_fkey"
     q = ( "SELECT EXISTS(SELECT FROM information_schema.table_constraints "
-         f"WHERE table_name='message' AND constraint_name='{constraint_name}')")
-    has_fkey = await conn.fetchval(q)
-    if not has_fkey:
+         f"WHERE table_name='{table_name}' AND constraint_name='{constraint_name}')")
+    has_constraint = await conn.fetchval(q)
+    if not has_constraint:
         await conn.execute(
-        f"ALTER TABLE message ADD CONSTRAINT {constraint_name} "
+        f"ALTER TABLE {table_name} ADD CONSTRAINT {constraint_name} "
             "FOREIGN KEY (chat_id) "
                 "REFERENCES portal (chat_id) "
                 "ON DELETE CASCADE")
