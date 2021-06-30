@@ -79,7 +79,9 @@ const ChatTypeEnum = Object.freeze({
 })
 
 const MSG_DECRYPTING = "ⓘ Decrypting..."
-// TODO consts for common selectors
+
+// TODO add more common selectors
+const SEL_PARTICIPANTS_LIST = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
 
 class MautrixController {
 	constructor() {
@@ -215,9 +217,6 @@ class MautrixController {
 		const receipt = element.querySelector(".mdRGT07Own .mdRGT07Read:not(.MdNonDisp)")
 		let receipt_count
 
-		// TODO Clean up participantsList access...
-		const participantsListSelector = "#_chat_detail_area > .mdRGT02Info ul.mdRGT13Ul"
-
 		// Don't need sender ID for direct chats, since the portal will have it already.
 		if (chatType == ChatTypeEnum.DIRECT) {
 			sender = null
@@ -233,7 +232,7 @@ class MautrixController {
 			// but the participant list includes their ID.
 			// ROOMS DO NOT!! Ugh.
 			if (!sender.id) {
-				const participantsList = document.querySelector(participantsListSelector)
+				const participantsList = document.querySelector(SEL_PARTICIPANTS_LIST)
 				// Groups use a participant's name as the alt text of their avatar image,
 				// but rooms do not...ARGH! But they both use a dedicated element for it.
 				const participantNameElement =
@@ -257,7 +256,7 @@ class MautrixController {
 			// 	// TODO Cache this so own ID can be used later
 			// 	sender = participantsList.children[0].getAttribute("data-mid")
 			// }
-			const participantsList = document.querySelector(participantsListSelector)
+			const participantsList = document.querySelector(SEL_PARTICIPANTS_LIST)
 			sender.name = this.getParticipantListItemName(participantsList.children[0])
 			sender.avatar = this.getParticipantListItemAvatar(participantsList.children[0])
 			sender.id = this.ownID
