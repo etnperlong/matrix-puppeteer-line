@@ -916,7 +916,7 @@ class MautrixController {
 				!change.target.classList.contains("MdNonDisp")) {
 				const msgElement = change.target.closest(".mdRGT07Own")
 				if (msgElement) {
-					let id = +msgElement.getAttribute("data-local-id")
+					const id = +msgElement.getAttribute("data-local-id")
 					if (!receipt_id || receipt_id < id) {
 						receipt_id = id
 					}
@@ -1086,7 +1086,7 @@ class MautrixController {
 						// Skip timestamps, as these are always current
 						child.classList.contains("MdRGT07Cont"))
 					{
-						const msgID = child.getAttribute("data-local-id")
+						const msgID = +child.getAttribute("data-local-id")
 						if (msgID > minID) {
 							pendingMsgElements.add(child)
 
