@@ -46,9 +46,11 @@ export default class MessagesPuppeteer {
 		this.sendPlaceholders = sendPlaceholders
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
-		this.sentMessageIDs = new Set()
 		this.mostRecentMessages = new Map()
+		this.mostRecentOwnMessages = new Map()
+		this.mostRecentReceipts = new Map()
 		this.numChatNotifications = new Map()
+		this.cycleTimerID = null
 		this.taskQueue = new TaskQueue(this.id)
 		this.client = client
 	}
@@ -105,8 +107,6 @@ export default class MessagesPuppeteer {
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
 		await this.page.exposeFunction("__mautrixSendEmailCredentials", this._sendEmailCredentials.bind(this))
 		await this.page.exposeFunction("__mautrixReceivePIN", this._receivePIN.bind(this))
-		await this.page.exposeFunction("__mautrixReceiveMessageID",
-			id => this.sentMessageIDs.add(id))
 		await this.page.exposeFunction("__mautrixReceiveChanges",
 			this._receiveChatListChanges.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveMessages",
@@ -424,19 +424,40 @@ export default class MessagesPuppeteer {
 	 * Get messages in a chat.
 	 *
 	 * @param {string} chatID The ID of the chat whose messages to get.
-	 * @return {Promise<[MessageData]>} - The messages visible in the chat.
+	 * @return {Promise<ChatEvents>} - New messages and receipts synced fron the chat.
 	 */
 	async getMessages(chatID) {
 		return await this.taskQueue.push(() => this._getMessagesUnsafe(chatID))
 	}
 
-	setLastMessageIDs(ids) {
+	setLastMessageIDs(msgIDs, ownMsgIDs, rctIDs) {
 		this.mostRecentMessages.clear()
-		for (const [chatID, messageID] of Object.entries(ids)) {
+		for (const [chatID, messageID] of Object.entries(msgIDs)) {
 			this.mostRecentMessages.set(chatID, messageID)
 		}
 		this.log("Updated most recent message ID map:")
-		this.log(JSON.stringify(this.mostRecentMessages))
+		this.log(JSON.stringify(msgIDs))
+
+		for (const [chatID, messageID] of Object.entries(ownMsgIDs)) {
+			this.mostRecentOwnMessages.set(chatID, messageID)
+		}
+		this.log("Updated most recent own message ID map:")
+		this.log(JSON.stringify(ownMsgIDs))
+
+		this.mostRecentReceipts.clear()
+		for (const [chatID, receipts] of Object.entries(rctIDs)) {
+			const receiptMap = this._getReceiptMap(chatID)
+			for (const [count, receiptID] of Object.entries(receipts)) {
+				receiptMap.set(+count, receiptID)
+			}
+		}
+		this.log("Updated most recent receipt ID map")
+		for (const [chatID, receiptMap] of this.mostRecentReceipts) {
+			this.log(`${chatID}:`)
+			for (const [count, receiptID] of receiptMap) {
+				this.log(`Read by ${count}: ${receiptID}`)
+			}
+		}
 	}
 
 	async readImage(imageUrl) {
@@ -450,9 +471,69 @@ export default class MessagesPuppeteer {
 		return { id: await this.taskQueue.push(() => this._sendFileUnsafe(chatID, filePath)) }
 	}
 
+	_cycleTimerStart() {
+		// TODO Config for cycle delay
+		this.cycleTimerID = setTimeout(
+			() => this.taskQueue.push(() => this._cycleChatUnsafe()),
+			5000)
+	}
+
+	async _cycleChatUnsafe() {
+		const currentChatID = await this.page.evaluate(() => window.__mautrixController.getCurrentChatID())
+		const chatList = await this.page.evaluate(() => window.__mautrixController.parseChatListForCycle())
+		// Add 1 to start at the chat after the currently-viewed one
+		const offset = 1 + Math.max(chatList.findIndex(item => item.id == currentChatID), 0)
+
+		// Visit next chat for which:
+		// - there are no unread notifications
+		// - the most recently-sent own message is not fully read
+		let chatIDToSync
+		for (let i = 0, n = chatList.length; i < n; i++) {
+			const chatListItem = chatList[(i+offset) % n]
+
+			if (chatListItem.notificationCount > 0) {
+				// Chat has unread notifications, so don't view it
+				continue
+			}
+
+			if (chatListItem.otherParticipantCount == 0) {
+				// Chat has no other participants (must be a non-DM with only you), so nothing to sync
+				continue
+			}
+
+			const mostRecentOwnMsgID = this.mostRecentOwnMessages.get(chatListItem.id)
+			if (mostRecentOwnMsgID == undefined) {
+				// Chat doesn't have any own messages, so no need to view it
+				continue
+			}
+
+			const receiptMap = this._getReceiptMap(chatListItem.id)
+			const mostRecentFullyReadMsgID = receiptMap.get(chatListItem.otherParticipantCount)
+			if (mostRecentFullyReadMsgID == mostRecentOwnMsgID) {
+				// Latest own message is fully-read, nothing to see here, move along
+				continue
+			}
+
+			chatIDToSync = chatListItem.id
+			break
+		}
+
+		if (!chatIDToSync) {
+			// TODO Confirm if this actually works...!
+			this.log(`Found no chats in need of read receipt updates, so force-viewing ${currentChatID} just to keep LINE alive`)
+			await this._switchChat(currentChatID, true)
+		} else {
+			this.log(`Viewing chat ${chatIDToSync} to check for new read receipts`)
+			await this._syncChat(chatIDToSync)
+		}
+
+		this._cycleTimerStart()
+	}
+
 	async startObserving() {
+		// TODO Highly consider syncing anything that was missed since stopObserving...
 		const chatID = await this.page.evaluate(() => window.__mautrixController.getCurrentChatID())
-		this.log(`Adding observers for ${chatID || "empty chat"}`)
+		this.log(`Adding observers for ${chatID || "empty chat"}, and global timers`)
 		await this.page.evaluate(
 			() => window.__mautrixController.addChatListObserver())
 		if (chatID) {
@@ -460,14 +541,23 @@ export default class MessagesPuppeteer {
 				(mostRecentMessage) => window.__mautrixController.addMsgListObserver(mostRecentMessage),
 				this.mostRecentMessages.get(chatID))
 		}
+
+		if (this.cycleTimerID == null) {
+			this._cycleTimerStart()
+		}
 	}
 
 	async stopObserving() {
-		this.log("Removing observers")
+		this.log("Removing observers and timers")
 		await this.page.evaluate(
 			() => window.__mautrixController.removeChatListObserver())
 		await this.page.evaluate(
 			() => window.__mautrixController.removeMsgListObserver())
+
+		if (this.cycleTimerID != null) {
+			clearTimeout(this.cycleTimerID)
+			this.cycleTimerID = null
+		}
 	}
 
 	async getOwnProfile() {
@@ -651,7 +741,7 @@ export default class MessagesPuppeteer {
 
 	async _sendMessageUnsafe(chatID, text) {
 		// Sync all messages in this chat first
-		this._receiveMessages(chatID, await this._getMessagesUnsafe(chatID), true)
+		await this._syncChat(chatID)
 		// TODO Initiate the promise in the content script
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
@@ -670,7 +760,7 @@ export default class MessagesPuppeteer {
 	}
 
 	async _sendFileUnsafe(chatID, filePath) {
-		this._receiveMessages(chatID, await this._getMessagesUnsafe(chatID), true)
+		await this._syncChat(chatID)
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(
 				10000, // Use longer timeout for file uploads
@@ -701,6 +791,8 @@ export default class MessagesPuppeteer {
 			const id = await this.page.evaluate(
 				() => window.__mautrixController.waitForOwnMessage())
 			this.log(`Successfully sent message ${id} to ${chatID}`)
+			this.mostRecentMessages.set(chatID, id)
+			this.mostRecentOwnMessages.set(chatID, id)
 			return id
 		} catch (e) {
 			// TODO Catch if something other than a timeout
@@ -712,10 +804,10 @@ export default class MessagesPuppeteer {
 	}
 
 	_receiveMessages(chatID, messages, skipProcessing = false) {
+		if (!skipProcessing) {
+			messages = this._processMessages(chatID, messages)
+		}
 		if (this.client) {
-			if (!skipProcessing) {
-				messages = this._processMessages(chatID, messages)
-			}
 			for (const message of messages) {
 				this.client.sendMessage(message).catch(err =>
 					this.error("Failed to send message", message.id, "to client:", err))
@@ -737,11 +829,44 @@ export default class MessagesPuppeteer {
 		await this._switchChat(chatID)
 		// TODO Is it better to reset the notification count in _switchChat instead of here?
 		this.numChatNotifications.set(chatID, 0)
+
+
 		let messages = await this.page.evaluate(
 			mostRecentMessage => window.__mautrixController.parseMessageList(mostRecentMessage),
 			this.mostRecentMessages.get(chatID))
 		// Doing this before restoring the observer since it updates minID
 		messages = this._processMessages(chatID, messages)
+
+
+		const receiptMap = this._getReceiptMap(chatID)
+
+		// Sync receipts seen from newly-synced messages
+		// TODO When user leaves, clear the read-by count for the old number of other participants
+		let minCountToFind = 1
+		for (let i = messages.length-1; i >= 0; i--) {
+			const message = messages[i]
+			if (!message.is_outgoing) {
+				continue
+			}
+			const count = message.receipt_count
+			if (count >= minCountToFind && message.id > (receiptMap.get(count) || 0)) {
+				minCountToFind = count+1
+				receiptMap.set(count, message.id)
+			}
+			// TODO Early exit when count == num other participants
+		}
+
+		// Sync receipts from previously-seen messages
+		const receipts = await this.page.evaluate(
+			mostRecentReceipts => window.__mautrixController.parseReceiptList(mostRecentReceipts),
+			Object.fromEntries(receiptMap))
+		for (const receipt of receipts) {
+			receiptMap.set(receipt.count, receipt.id)
+			receipt.chat_id = chatID
+		}
+
+		this._trimReceiptMap(receiptMap)
+
 
 		if (hadMsgListObserver) {
 			this.log("Restoring msg list observer")
@@ -752,13 +877,16 @@ export default class MessagesPuppeteer {
 			this.log("Not restoring msg list observer, as there never was one")
 		}
 
-		return messages
+		return {
+			messages: messages,
+			receipts: receipts
+		}
 	}
 
 	_processMessages(chatID, messages) {
 		// TODO Probably don't need minID filtering if Puppeteer context handles it now
 		const minID = this.mostRecentMessages.get(chatID) || 0
-		const filteredMessages = messages.filter(msg => msg.id > minID && !this.sentMessageIDs.has(msg.id))
+		const filteredMessages = messages.filter(msg => msg.id > minID)
 
 		if (filteredMessages.length > 0) {
 			const newFirstID = filteredMessages[0].id
@@ -769,9 +897,37 @@ export default class MessagesPuppeteer {
 			for (const message of filteredMessages) {
 				message.chat_id = chatID
 			}
+			for (let i = filteredMessages.length - 1; i >= 0; i--) {
+				const message = filteredMessages[i]
+				if (message.is_outgoing) {
+					this.mostRecentOwnMessages.set(chatID, message.id)
+					break
+				}
+			}
 			return filteredMessages
 		} else {
 			return []
+		}
+	}
+
+	_getReceiptMap(chatID) {
+		if (!this.mostRecentReceipts.has(chatID)) {
+			const newMap = new Map()
+			this.mostRecentReceipts.set(chatID, newMap)
+			return newMap
+		} else {
+			return this.mostRecentReceipts.get(chatID)
+		}
+	}
+
+	_trimReceiptMap(receiptMap) {
+		// Delete lower counts for earlier messages
+		let prevCount = null
+		for (const count of Array.from(receiptMap.keys()).sort()) {
+			if (prevCount != null && receiptMap.get(prevCount) < receiptMap.get(count)) {
+				receiptMap.delete(count)
+			}
+			prevCount = count
 		}
 	}
 
@@ -818,22 +974,26 @@ export default class MessagesPuppeteer {
 				html: chatListInfo.lastMsg,
 			}]
 			this.numChatNotifications.set(chatID, chatListInfo.notificationCount)
+			this._receiveMessages(chatID, messages, true)
 		} else {
-			messages = await this._getMessagesUnsafe(chatListInfo.id)
 			this.numChatNotifications.set(chatID, 0)
-			if (messages.length === 0) {
-				this.log("No new messages found in", chatListInfo.id)
-				return
-			}
+			await this._syncChat(chatListInfo.id)
+		}
+	}
+
+	async _syncChat(chatID) {
+		const {messages, receipts} = await this._getMessagesUnsafe(chatID)
+
+		if (messages.length == 0) {
+			this.log("No new messages found in", chatID)
+		} else {
+			this._receiveMessages(chatID, messages, true)
 		}
 
-		if (this.client) {
-			for (const message of messages) {
-				await this.client.sendMessage(message).catch(err =>
-					this.error("Failed to send message", message.id || "with no ID", "to client:", err))
-			}
+		if (receipts.length == 0) {
+			this.log("No new receipts found in", chatID)
 		} else {
-			this.log("No client connected, not sending messages")
+			this._receiveReceiptMulti(chatID, receipts, true)
 		}
 	}
 
@@ -849,7 +1009,15 @@ export default class MessagesPuppeteer {
 	}
 
 	_receiveReceiptDirectLatest(chat_id, receipt_id) {
-		this.log(`Received read receipt ${receipt_id} for chat ${chat_id}`)
+		const receiptMap = this._getReceiptMap(chat_id)
+		const prevReceiptID = (receiptMap.get(1) || 0)
+		if (receipt_id <= prevReceiptID) {
+			this.log(`Received OUTDATED read receipt ${receipt_id} (older than ${prevReceiptID}) for chat ${chat_id}`)
+			return
+		}
+		receiptMap.set(1, receipt_id)
+
+		this.log(`Received read receipt ${receipt_id} (since ${prevReceiptID}) for chat ${chat_id}`)
 		if (this.client) {
 			this.client.sendReceipt({chat_id: chat_id, id: receipt_id})
 				.catch(err => this.error("Error handling read receipt:", err))
@@ -858,8 +1026,26 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	async _receiveReceiptMulti(chat_id, receipts) {
+	async _receiveReceiptMulti(chat_id, receipts, skipProcessing = false) {
 		// Use async to ensure that receipts are sent in order
+
+		if (!skipProcessing) {
+			const receiptMap = this._getReceiptMap(chat_id)
+			receipts.filter(receipt => {
+				if (receipt.id > (receiptMap.get(receipt.count) || 0)) {
+					receiptMap.set(receipt.count, receipt.id)
+					return true
+				} else {
+					return false
+				}
+			})
+			if (receipts.length == 0) {
+				this.log(`Received ALL OUTDATED bulk read receipts for chat ${chat_id}:`, receipts)
+				return
+			}
+			this._trimReceiptMap(receiptMap)
+		}
+
 		this.log(`Received bulk read receipts for chat ${chat_id}:`, receipts)
 		if (this.client) {
 			for (const receipt of receipts) {

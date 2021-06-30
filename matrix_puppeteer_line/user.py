@@ -22,7 +22,7 @@ from mautrix.types import UserID, RoomID
 from mautrix.appservice import AppService, IntentAPI
 from mautrix.util.opt_prometheus import Gauge
 
-from .db import User as DBUser, Portal as DBPortal, Message as DBMessage
+from .db import User as DBUser, Portal as DBPortal, Message as DBMessage, Receipt as DBReceipt
 from .config import Config
 from .rpc import Client, Message, Receipt
 from . import puppet as pu, portal as po
@@ -135,7 +135,10 @@ class User(DBUser, BaseUser):
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.pause()
         await self.sync_own_profile()
-        await self.client.set_last_message_ids(await DBMessage.get_max_mids())
+        await self.client.set_last_message_ids(
+            await DBMessage.get_max_mids(),
+            await DBMessage.get_max_outgoing_mids(),
+            await DBReceipt.get_max_mids_per_num_read())
         limit = self.config["bridge.initial_conversation_sync"]
         self.log.info("Syncing chats")
         await self.send_bridge_notice("Synchronizing chats...")
@@ -186,7 +189,10 @@ class User(DBUser, BaseUser):
         self.log.trace("Received message %s", evt)
         portal = await po.Portal.get_by_chat_id(evt.chat_id, create=True)
         if not portal.mxid:
-            await self.client.set_last_message_ids(await DBMessage.get_max_mids())
+            await self.client.set_last_message_ids(
+                await DBMessage.get_max_mids(),
+                await DBMessage.get_max_outgoing_mids(),
+                await DBReceipt.get_max_mids_per_num_read())
             chat_info = await self.client.get_chat(evt.chat_id)
             await portal.create_matrix_room(self, chat_info)
         await portal.handle_remote_message(self, evt)

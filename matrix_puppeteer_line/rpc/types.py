@@ -78,6 +78,12 @@ class Receipt(SerializableAttrs['Receipt']):
 
 
 @dataclass
+class ChatEvents(SerializableAttrs['ChatEvents']):
+    messages: List[Message]
+    receipts: List[Receipt]
+
+
+@dataclass
 class ImageData:
     mime: str
     data: bytes

@@ -19,7 +19,7 @@ from base64 import b64decode
 import asyncio
 
 from .rpc import RPCClient
-from .types import ChatListInfo, ChatInfo, ImageData, Message, Participant, Receipt, StartStatus
+from .types import ChatEvents, ChatListInfo, ChatInfo, ImageData, Message, Participant, Receipt, StartStatus
 
 
 class LoginCommand(TypedDict):
@@ -51,9 +51,8 @@ class Client(RPCClient):
     async def get_chat(self, chat_id: str, force_view: bool = False) -> ChatInfo:
         return ChatInfo.deserialize(await self.request("get_chat", chat_id=chat_id, force_view=force_view))
 
-    async def get_messages(self, chat_id: str) -> List[Message]:
-        resp = await self.request("get_messages", chat_id=chat_id)
-        return [Message.deserialize(data) for data in resp]
+    async def get_messages(self, chat_id: str) -> ChatEvents:
+        return ChatEvents.deserialize(await self.request("get_messages", chat_id=chat_id))
 
     async def read_image(self, image_url: str) -> ImageData:
         resp = await self.request("read_image", image_url=image_url)
@@ -86,8 +85,8 @@ class Client(RPCClient):
         resp = await self.request("send_file", chat_id=chat_id, file_path=file_path)
         return resp["id"]
 
-    async def set_last_message_ids(self, msg_ids: Dict[str, int]) -> None:
-        await self.request("set_last_message_ids", msg_ids=msg_ids)
+    async def set_last_message_ids(self, msg_ids: Dict[str, int], own_msg_ids: Dict[str, int], rct_ids: Dict[str, Dict[int, int]]) -> None:
+        await self.request("set_last_message_ids", msg_ids=msg_ids, own_msg_ids=own_msg_ids, rct_ids=rct_ids)
 
     async def on_message(self, func: Callable[[Message], Awaitable[None]]) -> None:
         async def wrapper(data: Dict[str, Any]) -> None:

@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Optional, ClassVar, Dict, TYPE_CHECKING
+from typing import Optional, ClassVar, Dict, List, TYPE_CHECKING
 
 from attr import dataclass
 
@@ -31,10 +31,11 @@ class Message:
     mx_room: RoomID
     mid: Optional[int]
     chat_id: str
+    is_outgoing: bool
 
     async def insert(self) -> None:
-        q = "INSERT INTO message (mxid, mx_room, mid, chat_id) VALUES ($1, $2, $3, $4)"
-        await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id)
+        q = "INSERT INTO message (mxid, mx_room, mid, chat_id, is_outgoing) VALUES ($1, $2, $3, $4, $5)"
+        await self.db.execute(q, self.mxid, self.mx_room, self.mid, self.chat_id, self.is_outgoing)
 
     async def update_ids(self, new_mxid: EventID, new_mid: int) -> None:
         q = ("UPDATE message SET mxid=$1, mid=$2 "
@@ -50,6 +51,15 @@ class Message:
     async def get_max_mids(cls) -> Dict[str, int]:
         rows = await cls.db.fetch("SELECT chat_id, MAX(mid) AS max_mid "
                                   "FROM message GROUP BY chat_id")
+        data = {}
+        for row in rows:
+            data[row["chat_id"]] = row["max_mid"]
+        return data
+
+    @classmethod
+    async def get_max_outgoing_mids(cls) -> Dict[str, int]:
+        rows = await cls.db.fetch("SELECT chat_id, MAX(mid) AS max_mid "
+                                  "FROM message WHERE is_outgoing GROUP BY chat_id")
         data = {}
         for row in rows:
             data[row["chat_id"]] = row["max_mid"]
@@ -74,7 +84,7 @@ class Message:
 
     @classmethod
     async def get_by_mxid(cls, mxid: EventID, mx_room: RoomID) -> Optional['Message']:
-        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id "
+        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id, is_outgoing "
                                     "FROM message WHERE mxid=$1 AND mx_room=$2", mxid, mx_room)
         if not row:
             return None
@@ -82,15 +92,22 @@ class Message:
 
     @classmethod
     async def get_by_mid(cls, mid: int) -> Optional['Message']:
-        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id FROM message WHERE mid=$1",
+        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id, is_outgoing FROM message WHERE mid=$1",
                                     mid)
         if not row:
             return None
         return cls(**row)
 
     @classmethod
+    async def get_all_since(cls, chat_id: str, min_mid: int, max_mid: int) -> List['Message']:
+        rows = await cls.db.fetch("SELECT mxid, mx_room, mid, chat_id, is_outgoing FROM message "
+                                  "WHERE chat_id=$1 AND $2<mid AND mid<=$3",
+                                  chat_id, min_mid, max_mid)
+        return [cls(**row) for row in rows]
+
+    @classmethod
     async def get_next_noid_msg(cls, room_id: RoomID) -> Optional['Message']:
-        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id FROM message "
+        row = await cls.db.fetchrow("SELECT mxid, mx_room, mid, chat_id, is_outgoing FROM message "
                                     "WHERE mid IS NULL AND mx_room=$1", room_id)
         if not row:
             return None

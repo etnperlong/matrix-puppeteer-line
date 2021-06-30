@@ -135,4 +135,31 @@ async def upgrade_strangers(conn: Connection) -> None:
 async def upgrade_noid_msgs(conn: Connection) -> None:
     await conn.execute("ALTER TABLE message DROP CONSTRAINT IF EXISTS message_pkey")
     await conn.execute("ALTER TABLE message ALTER COLUMN mid DROP NOT NULL")
-    await conn.execute("ALTER TABLE message ADD UNIQUE (mid)")
+
+    table_name = "message"
+    constraint_name = f"{table_name}_mid_key"
+    q = ( "SELECT EXISTS(SELECT FROM information_schema.constraint_table_usage "
+         f"WHERE table_name='{table_name}' AND constraint_name='{constraint_name}')")
+    has_constraint = await conn.fetchval(q)
+    if not has_constraint:
+        await conn.execute(f"ALTER TABLE {table_name} ADD UNIQUE (mid)")
+
+
+@upgrade_table.register(description="Track LINE read receipts")
+async def upgrade_latest_read_receipts(conn: Connection) -> None:
+    await conn.execute("ALTER TABLE message DROP CONSTRAINT IF EXISTS message_mid_key")
+    await conn.execute("ALTER TABLE message ADD UNIQUE (mid, chat_id)")
+    await conn.execute("ALTER TABLE message "
+                       "ADD COLUMN IF NOT EXISTS "
+                       "is_outgoing BOOLEAN NOT NULL DEFAULT false")
+
+    await conn.execute("""CREATE TABLE IF NOT EXISTS receipt (
+        mid      INTEGER NOT NULL,
+        chat_id  TEXT NOT NULL,
+        num_read INTEGER NOT NULL DEFAULT 1,
+
+        PRIMARY KEY (chat_id, num_read),
+        FOREIGN KEY (mid, chat_id)
+            REFERENCES message (mid, chat_id)
+            ON DELETE CASCADE
+    )""")

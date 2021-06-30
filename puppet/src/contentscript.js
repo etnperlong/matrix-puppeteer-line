@@ -65,11 +65,6 @@ window.__mautrixReceivePIN = function (pin) {}
  */
 window.__mautrixExpiry = function (button) {}
 /**
- * @param {number} id - The ID of the message that was sent
- * @return {Promise<void>}
- */
-window.__mautrixReceiveMessageID = function(id) {}
-/**
  * @return {void}
  */
 window.__mautrixLoggedOut = function() {}
@@ -490,6 +485,13 @@ class MautrixController {
 	}
 
 	/**
+	 * @typedef ChatEvents
+	 * @type {object}
+	 * @property {MessageData[]} messages - All synced messages, which include receipts for them (if any).
+	 * @property {ReceiptData[]} receipts - All synced receipts for messages already present.
+	 */
+
+	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
 	 * @param {int} minID - The minimum message ID to consider.
@@ -519,6 +521,61 @@ class MautrixController {
 		return (await Promise.allSettled(messagePromises))
 		.filter(value => value.status == "fulfilled")
 		.map(value => value.value)
+	}
+
+	/**
+	 * Parse receipts of whatever the currently-viewed chat is.
+	 * Should only be used for already-processed messages that
+	 * get skipped by parseMessageList.
+	 *
+	 * @param {?Object} rctIDs - The minimum receipt ID to consider for each "read by" count.
+	 *                           It's an Object because Puppeteer can't send a Map.
+	 * @return {ReceiptData[]} - A list of receipts.
+	 */
+	parseReceiptList(rctIDs = {}) {
+		console.debug(`rctIDs for full refresh: ${rctIDs}`)
+
+		const isDirect = this.getChatType(this.getCurrentChatID()) == ChatTypeEnum.DIRECT
+		const numOthers = isDirect ? 1 : document.querySelector(SEL_PARTICIPANTS_LIST).childElementCount - 1
+
+		const idGetter = e => +e.closest("[data-local-id]").getAttribute("data-local-id")
+
+		const receipts =
+			Array.from(document.querySelectorAll("#_chat_room_msg_list .mdRGT07Read:not(.MdNonDisp)"))
+			.map(isDirect
+				? e => {
+					return {
+						id: idGetter(e),
+						count: 1
+					}
+				}
+				: e => {
+					return {
+						id: idGetter(e),
+						count: this._getReceiptCount(e)
+					}
+				}
+				// Using two lambdas to not branch on isDirect for every element
+			)
+
+		const newReceipts = []
+		const prevFullyReadID = rctIDs[`${numOthers}`] || 0
+		let minCountToFind = 1
+		for (let i = receipts.length-1; i >= 0; i--) {
+			const receipt = receipts[i]
+			if (receipt.count >= minCountToFind && receipt.id > (rctIDs[`${receipt.count}`] || 0)) {
+				newReceipts.push(receipt)
+				if (receipt.count < numOthers) {
+					minCountToFind = receipt.count+1
+				} else {
+					break
+				}
+			} else if (receipt.id <= prevFullyReadID) {
+				break
+			}
+		}
+
+		return newReceipts
 	}
 
 	/**
@@ -611,6 +668,16 @@ class MautrixController {
 	 *                                        signified by the number in its notification badge.
 	 */
 
+	/**
+	 * @typedef ChatListInfoForCycle
+	 * @type object
+	 * @property {number} id      - The ID of the chat.
+	 * @property {number} notificationCount - The number of unread messages in the chat,
+	 *                                        signified by the number in its notification badge.
+	 * @property {number} numParticipants - The number of participants in the chat,
+	 *                                      signified by a count next to the chat title.
+	 */
+
 	getChatListItemID(element) {
 		return element.getAttribute("data-chatid")
 	}
@@ -633,6 +700,12 @@ class MautrixController {
 
 	getChatListItemNotificationCount(element) {
 		return Number.parseInt(element.querySelector(".MdIcoBadge01:not(.MdNonDisp)")?.innerText) || 0
+	}
+
+	getChatListItemOtherParticipantCount(element) {
+		const countElement = element.querySelector(".mdCMN04Count:not(.MdNonDisp)")
+		const match = countElement?.innerText.match(/\d+/)
+		return match ? match[0] - 1 : 1
 	}
 
 	/**
@@ -662,6 +735,32 @@ class MautrixController {
 		const chatList = document.querySelector("#_chat_list_body")
 		return Array.from(chatList.children).map(
 			child => this.parseChatListItem(child.firstElementChild))
+	}
+
+	/**
+	 * Parse a conversation list item element for cycling.
+	 *
+	 * @param {Element} element - The element to parse.
+	 * @return {ChatListInfoForCycle} - The info in the element.
+	 */
+	parseChatListItemForCycle(element) {
+		return {
+			id: this.getChatListItemID(element),
+			notificationCount: this.getChatListItemNotificationCount(element),
+			otherParticipantCount: this.getChatListItemOtherParticipantCount(element),
+		}
+	}
+
+	/**
+	 * Parse the list of recent/saved chats, but for properties
+	 * relevant to knowing which chat to cycle onto for read receipts.
+	 *
+	 * @return {ChatListInfoForCycle[]} - The list of chats with relevant properties.
+	 */
+	parseChatListForCycle() {
+		const chatList = document.querySelector("#_chat_list_body")
+		return Array.from(chatList.children).map(
+			child => this.parseChatListItemForCycle(child.firstElementChild))
 	}
 
 	/**
@@ -800,7 +899,14 @@ class MautrixController {
 	}
 
 	/**
-	 * @param {[MutationRecord]} mutations - The mutation records that occurred
+	 * @typedef ReceiptData
+	 * @type {object}
+	 * @property {number}  id     - The ID of the read message.
+	 * @property {?number} count  - The number of users who have read the message.
+	 */
+
+	/**
+	 * @param {MutationRecord[]} mutations - The mutation records that occurred
 	 * @param {string} chatID - The ID of the chat being observed.
 	 * @private
 	 */
@@ -1182,8 +1288,7 @@ class MautrixController {
 		const resolve = this.promiseOwnMsgResolve
 		this._promiseOwnMsgReset()
 
-		window.__mautrixReceiveMessageID(msgID).then(
-			() => resolve(msgID))
+		resolve(msgID)
 	}
 
 	_rejectOwnMessage(failureElement = null) {

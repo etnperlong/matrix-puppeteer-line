@@ -32,7 +32,7 @@ from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, Mess
 from mautrix.errors import IntentError
 from mautrix.util.simple_lock import SimpleLock
 
-from .db import Portal as DBPortal, Message as DBMessage, ReceiptReaction as DBReceiptReaction, Media as DBMedia
+from .db import Portal as DBPortal, Message as DBMessage, Receipt as DBReceipt, ReceiptReaction as DBReceiptReaction, Media as DBMedia
 from .config import Config
 from .rpc import ChatInfo, Participant, Message, Receipt, Client, PathImage
 from .rpc.types import RPCError
@@ -173,7 +173,7 @@ class Portal(DBPortal, BasePortal):
         msg = None
         if message_id != -1:
             try:
-                msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id)
+                msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=message_id, chat_id=self.chat_id, is_outgoing=True)
                 await msg.insert()
                 await self._send_delivery_receipt(event_id)
                 self.log.debug(f"Handled Matrix message {event_id} -> {message_id}")
@@ -211,7 +211,7 @@ class Portal(DBPortal, BasePortal):
                 intent = None
         return intent
 
-    async def handle_remote_message(self, source: 'u.User', evt: Message) -> None:
+    async def handle_remote_message(self, source: 'u.User', evt: Message, handle_receipt: bool = True) -> None:
         if await DBMessage.get_by_mid(evt.id):
             self.log.debug(f"Ignoring duplicate message {evt.id}")
             return
@@ -371,11 +371,8 @@ class Portal(DBPortal, BasePortal):
                 content.set_edit(prev_event_id)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
 
-        if evt.is_outgoing and evt.receipt_count:
-            await self._handle_receipt(event_id, evt.receipt_count)
-
         if not msg:
-            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id)
+            msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id, is_outgoing=evt.is_outgoing)
             try:
                 await msg.insert()
                 #await self._send_delivery_receipt(event_id)
@@ -386,32 +383,56 @@ class Portal(DBPortal, BasePortal):
             await msg.update_ids(new_mxid=event_id, new_mid=evt.id)
             self.log.debug(f"Handled preseen remote message {evt.id} -> {event_id}")
 
+        if handle_receipt and evt.is_outgoing and evt.receipt_count:
+            await self._handle_receipt(event_id, evt.id, evt.receipt_count)
+
     async def handle_remote_receipt(self, receipt: Receipt) -> None:
         msg = await DBMessage.get_by_mid(receipt.id)
         if msg:
-            await self._handle_receipt(msg.mxid, receipt.count)
+            await self._handle_receipt(msg.mxid, receipt.id, receipt.count)
         else:
             self.log.debug(f"Could not find message for read receipt {receipt.id}")
 
-    async def _handle_receipt(self, event_id: EventID, receipt_count: int) -> None:
+    async def _handle_receipt(self, event_id: EventID, receipt_id: int, receipt_count: int) -> None:
         if self.is_direct:
             await self.main_intent.send_receipt(self.mxid, event_id)
         else:
-            reaction = await DBReceiptReaction.get_by_relation(event_id, self.mxid)
-            if reaction:
-                await self.main_intent.redact(self.mxid, reaction.mxid)
-                await reaction.delete()
+            # Update receipts not only for this message, but also for
+            # all messages before it with an equivalent "read by" count.
+            prev_receipt_id = await DBReceipt.get_max_mid(self.chat_id, receipt_count) or 0
+            messages = await DBMessage.get_all_since(self.chat_id, prev_receipt_id, receipt_id)
+
+            # Remove reactions for outdated "read by" counts.
+            for message in messages:
+                reaction = await DBReceiptReaction.get_by_relation(message.mxid, self.mxid)
+                if reaction:
+                    await self.main_intent.redact(self.mxid, reaction.mxid)
+                    await reaction.delete()
+
             # If there are as many receipts as there are chat participants, then everyone
             # must have read the message, so send real read receipts from each puppet.
             # TODO Not just -1 if there are multiple _OWN_ puppets...
-            if receipt_count == len(self._last_participant_update) - 1:
+            is_fully_read = receipt_count >= len(self._last_participant_update) - 1
+            if is_fully_read:
                 for mid in filter(lambda mid: not p.Puppet.is_mid_for_own_puppet(mid), self._last_participant_update):
                     intent = (await p.Puppet.get_by_mid(mid)).intent
                     await intent.send_receipt(self.mxid, event_id)
             else:
-                # TODO Translatable string for "Read by"
-                reaction_mxid = await self.main_intent.react(self.mxid, event_id, f"(Read by {receipt_count})")
-                await DBReceiptReaction(reaction_mxid, self.mxid, event_id, receipt_count).insert()
+                # TODO messages list should exclude non-outgoing messages,
+                #     but include them just to get rid of potential stale reactions
+                for message in (msg for msg in messages if msg.is_outgoing):
+                    # TODO Translatable string for "Read by"
+                    try:
+                        reaction_mxid = await self.main_intent.react(self.mxid, message.mxid, f"(Read by {receipt_count})")
+                        await DBReceiptReaction(reaction_mxid, self.mxid, message.mxid, receipt_count).insert()
+                    except Exception as e:
+                        self.log.warning(f"Failed to send read receipt reaction for message {message.mxid} in {self.chat_id}: {e}")
+
+        try:
+            await DBReceipt(mid=receipt_id, chat_id=self.chat_id, num_read=receipt_count).insert_or_update()
+            self.log.debug(f"Handled read receipt for message {receipt_id} read by {receipt_count}")
+        except Exception as e:
+            self.log.debug(f"Failed to handle read receipt for message {receipt_id} read by {receipt_count}: {e}")
 
     async def _handle_remote_media(self, source: 'u.User', intent: IntentAPI,
                                         media_url: str, media_id: Optional[str] = None,
@@ -581,31 +602,54 @@ class Portal(DBPortal, BasePortal):
                 await self.main_intent.kick_user(self.mxid, user_id,
                                                  reason="Kicking own puppet")
 
-    async def backfill(self, source: 'u.User') -> None:
+    async def backfill(self, source: 'u.User', info: ChatInfo) -> None:
         try:
             with self.backfill_lock:
-                await self._backfill(source)
+                await self._backfill(source, info)
         except Exception:
             self.log.exception("Failed to backfill portal")
 
-    async def _backfill(self, source: 'u.User') -> None:
+    async def _backfill(self, source: 'u.User', info: ChatInfo) -> None:
         self.log.debug("Backfilling history through %s", source.mxid)
 
+        events = await source.client.get_messages(self.chat_id)
+
         max_mid = await DBMessage.get_max_mid(self.mxid) or 0
-        messages = [msg for msg in await source.client.get_messages(self.chat_id)
+        messages = [msg for msg in events.messages
                     if msg.id > max_mid]
 
         if not messages:
-            self.log.debug("Didn't get any entries from server")
+            self.log.debug("Didn't get any messages from server")
+        else:
+            self.log.debug("Got %d messages from server", len(messages))
+            async with NotificationDisabler(self.mxid, source):
+                for evt in messages:
+                    await self.handle_remote_message(source, evt, handle_receipt=self.is_direct)
+            self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
             await self._cleanup_noid_msgs()
-            return
 
-        self.log.debug("Got %d messages from server", len(messages))
-        async with NotificationDisabler(self.mxid, source):
+
+        if not self.is_direct:
+            # Update participants before sending any receipts
+            # TODO Joins and leaves are (usually) shown after all, so track them properly.
+            #      In the meantime, just check the participants list after backfilling.
+            await self._update_participants(info.participants)
             for evt in messages:
-                await self.handle_remote_message(source, evt)
-        self.log.info("Backfilled %d messages through %s", len(messages), source.mxid)
-        await self._cleanup_noid_msgs()
+                if evt.is_outgoing and evt.receipt_count:
+                    await self.handle_remote_message(source, evt, handle_receipt=False)
+
+
+        max_mid_per_num_read = await DBReceipt.get_max_mid_per_num_read(self.chat_id)
+        receipts = [rct for rct in events.receipts
+                    if rct.id > max_mid_per_num_read.get(rct.count, 0)]
+
+        if not receipts:
+            self.log.debug("Didn't get any receipts from server")
+        else:
+            self.log.debug("Got %d receipts from server", len(receipts))
+            for rct in receipts:
+                await self.handle_remote_receipt(rct)
+            self.log.info("Backfilled %d receipts through %s", len(receipts), source.mxid)
 
     @property
     def bridge_info_state_key(self) -> str:
@@ -661,8 +705,7 @@ class Portal(DBPortal, BasePortal):
             await puppet.intent.ensure_joined(self.mxid)
 
         await self.update_info(info, source.client)
-        await self.backfill(source)
-        await self._update_participants(info.participants)
+        await self.backfill(source, info)
 
     async def _create_matrix_room(self, source: 'u.User', info: ChatInfo) -> Optional[RoomID]:
         if self.mxid:
@@ -741,11 +784,7 @@ class Portal(DBPortal, BasePortal):
             await self.update()
             self.log.debug(f"Matrix room created: {self.mxid}")
             self.by_mxid[self.mxid] = self
-            await self.backfill(source)
-            if not self.is_direct:
-                # TODO Joins and leaves are (usually) shown after all, so track them properly.
-                #      In the meantime, just check the participants list after backfilling.
-                await self._update_participants(info.participants)
+            await self.backfill(source, info)
 
         return self.mxid
 
