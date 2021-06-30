@@ -74,4 +74,5 @@ class MatrixHandler(BaseMatrixHandler):
         #if await DBMessage.is_last_by_mxid(event_id, portal.mxid):
 
         # Viewing a chat by updating it whole-hog, lest a ninja arrives
-        await user.sync_portal(portal)
+        if not user.is_syncing:
+            await user.sync_portal(portal)

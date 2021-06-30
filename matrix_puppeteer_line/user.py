@@ -42,6 +42,7 @@ class User(DBUser, BaseUser):
     client: Optional[Client]
     intent: Optional[IntentAPI]
     is_real_user = True
+    is_syncing: bool
 
     _notice_room_lock: asyncio.Lock
     _connection_check_task: Optional[asyncio.Task]
@@ -56,6 +57,7 @@ class User(DBUser, BaseUser):
         self._connection_check_task = None
         self.client = None
         self.intent = None
+        self.is_syncing = False
 
     @classmethod
     def init_cls(cls, bridge: 'MessagesBridge') -> None:
@@ -130,6 +132,8 @@ class User(DBUser, BaseUser):
             await asyncio.sleep(5)
 
     async def sync(self) -> None:
+        # TODO Use some kind of async lock / event to queue syncing actions
+        self.is_syncing = True
         if self._connection_check_task:
             self._connection_check_task.cancel()
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
@@ -155,6 +159,7 @@ class User(DBUser, BaseUser):
                     num_created += 1
         await self.send_bridge_notice("Synchronization complete")
         await self.client.resume()
+        self.is_syncing = False
 
     async def sync_portal(self, portal: 'po.Portal') -> None:
         chat_id = portal.chat_id
