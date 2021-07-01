@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import process from "process"
 import path from "path"
+import { exec, execSync } from "child_process"
 
 import puppeteer from "puppeteer"
 import chrono from "chrono-node"
@@ -25,6 +26,9 @@ import { sleep } from "./util.js"
 export default class MessagesPuppeteer {
 	static profileDir = "./profiles"
 	static executablePath = undefined
+	static cycleDelay = 5000
+	static useXdotool = false
+	static jiggleDelay = 30000
 	static devtools = false
 	static noSandbox = false
 	static viewport = { width: 960, height: 840 }
@@ -43,6 +47,7 @@ export default class MessagesPuppeteer {
 		}
 		this.id = id
 		this.ownID = ownID
+		this.windowID = null
 		this.sendPlaceholders = sendPlaceholders
 		this.profilePath = profilePath
 		this.updatedChats = new Set()
@@ -51,6 +56,7 @@ export default class MessagesPuppeteer {
 		this.mostRecentReceipts = new Map()
 		this.numChatNotifications = new Map()
 		this.cycleTimerID = null
+		this.jiggleTimerID = null
 		this.taskQueue = new TaskQueue(this.id)
 		this.client = client
 	}
@@ -99,7 +105,14 @@ export default class MessagesPuppeteer {
 		this.blankPage = await this.browser.newPage()
 		await this.page.bringToFront()
 
-		this.log("Opening", MessagesPuppeteer.url)
+		if (MessagesPuppeteer.useXdotool) {
+			this.log("Finding window ID")
+			const buffer = execSync("xdotool search 'about:blank'")
+			this.windowID = Number.parseInt(buffer)
+			this.log(`Found window ID ${this.windowID}`)
+		}
+
+		this.log(`Opening ${MessagesPuppeteer.url}`)
 		await this.page.setBypassCSP(true) // Needed to load content scripts
 		await this._preparePage(true)
 
@@ -472,10 +485,9 @@ export default class MessagesPuppeteer {
 	}
 
 	_cycleTimerStart() {
-		// TODO Config for cycle delay
 		this.cycleTimerID = setTimeout(
 			() => this.taskQueue.push(() => this._cycleChatUnsafe()),
-			5000)
+			MessagesPuppeteer.cycleDelay)
 	}
 
 	async _cycleChatUnsafe() {
@@ -515,19 +527,37 @@ export default class MessagesPuppeteer {
 			}
 
 			chatIDToSync = chatListItem.id
+			this.log(`Viewing chat ${chatIDToSync} to check for new read receipts`)
+			await this._syncChat(chatIDToSync)
 			break
 		}
 
 		if (!chatIDToSync) {
-			// TODO Confirm if this actually works...!
-			this.log(`Found no chats in need of read receipt updates, so force-viewing ${currentChatID} just to keep LINE alive`)
-			await this._switchChat(currentChatID, true)
-		} else {
-			this.log(`Viewing chat ${chatIDToSync} to check for new read receipts`)
-			await this._syncChat(chatIDToSync)
+			this.log("Found no chats in need of read receipt updates")
 		}
 
 		this._cycleTimerStart()
+	}
+
+	/**
+	 * Jiggle the mouse periodically.
+	 * Have to do this to keep the LINE extension "awake". Ridiculous, but necessary...
+	 */
+	_jiggleTimerStart() {
+		this.jiggleTimerID = setTimeout(() => this._jiggleMouse(), MessagesPuppeteer.jiggleDelay)
+	}
+
+	_jiggleMouse() {
+		this.log("Jiggling mouse")
+		exec(`xdotool mousemove --sync --window ${this.windowID} 0 0`, {},
+		(error, stdout, stderr) => {
+			if (error) {
+				this.log(`Error while jiggling mouse: ${error}`)
+			} else {
+				this.log("Jiggled mouse")
+			}
+			this._jiggleTimerStart()
+		})
 	}
 
 	async startObserving() {
@@ -545,6 +575,9 @@ export default class MessagesPuppeteer {
 		if (this.cycleTimerID == null) {
 			this._cycleTimerStart()
 		}
+		if (MessagesPuppeteer.useXdotool && this.jiggleTimerID == null) {
+			this._jiggleTimerStart()
+		}
 	}
 
 	async stopObserving() {
@@ -557,6 +590,10 @@ export default class MessagesPuppeteer {
 		if (this.cycleTimerID != null) {
 			clearTimeout(this.cycleTimerID)
 			this.cycleTimerID = null
+		}
+		if (this.jiggleTimerID != null) {
+			clearTimeout(this.jiggleTimerID)
+			this.jiggleTimerID = null
 		}
 	}
 

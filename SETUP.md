@@ -1,6 +1,7 @@
 # Minimum Requirements
 * Python 3.8
 * Node 10.18.1
+* xdotool
 
 # Initial setup
 ## Puppeteer module

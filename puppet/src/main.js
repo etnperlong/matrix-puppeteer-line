@@ -39,6 +39,9 @@ MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDi
 MessagesPuppeteer.devtools = config.devtools || false
 MessagesPuppeteer.url = config.url
 MessagesPuppeteer.extensionDir = config.extension_dir || MessagesPuppeteer.extensionDir
+MessagesPuppeteer.cycleDelay = config.cycle_delay || MessagesPuppeteer.cycleDelay
+MessagesPuppeteer.useXdotool = config.use_xdotool || MessagesPuppeteer.useXdotool
+MessagesPuppeteer.jiggleDelay = config.jiggle_delay || MessagesPuppeteer.jiggleDelay
 
 const api = new PuppetAPI(config.listen)
 

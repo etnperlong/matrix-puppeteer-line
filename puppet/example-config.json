@@ -6,5 +6,8 @@
 	"profile_dir": "./profiles",
 	"url": "chrome-extension://<extension-uuid>/index.html",
 	"extension_dir": "./extension_files",
+	"cycle_delay": 5000,
+	"use_xdotool": false,
+	"jiggle_delay": 20000,
 	"devtools": false
 }
