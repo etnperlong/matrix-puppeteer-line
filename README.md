@@ -1,9 +1,12 @@
 # matrix-puppeteer-line
-A very hacky Matrix-LINE bridge based on running LINE's Chrome extension in Puppeteer.
-Fork of [https://mau.dev/tulir/mautrix-amp/](mautrix-amp).
+A Matrix-LINE puppeting bridge based on running LINE's Chrome extension in [Puppeteer](https://github.com/puppeteer/puppeteer).
+Fork of [mautrix-amp](https://mau.dev/tulir/mautrix-amp/).
 
-## Features, roadmap, and limitations
+## Features & roadmap
 [ROADMAP.md](ROADMAP.md)
+
+## Limitations & missing features
+[LIMITATIONS.md](LIMITATIONS.md)
 
 ## Setup
 [SETUP.md](SETUP.md)

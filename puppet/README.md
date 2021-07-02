@@ -16,9 +16,9 @@ The `extension_dir` specifies which directory contains the files for the LINE ex
 `cycle_delay` specifies the period (in milliseconds) at which Puppeteer should view chats to check on their read receipts. Only chats with messages that haven't been fully read need to be checked.
 
 ### `xdotool`
-Set `use_xdotool` to `true` to allow the Node process to manipulate the mouse cursor of the X server it runs in. Requires the `xdotool` utility to be installed. Highly recommended, especially when running in a virtual X server. Its default value is `false` so that running in a non-virtual X server won't interfere with a real mouse cursor.
+Set `use_xdotool` to `true` to allow the Node process to manipulate the mouse cursor of the X server it runs in. Requires the `xdotool` utility to be installed. Highly recommended, especially when running in a background X server. Its default value is `false` so that running in a non-background X server won't interfere with a real mouse cursor.
 
-`jiggle_delay` specifies the period (in milliseconds) between "jiggling" the mouse cursor (necessary to keep the LINE extension active). Only relevant when `use_xdotool` is `true`.
+`jiggle_delay` specifies the period (in milliseconds) for "jiggling" the mouse cursor (necessary to keep the LINE extension active). Only relevant when `use_xdotool` is `true`.
 
 ### DevTools
 Set `devtools` to `true` to launch Chromium with DevTools enabled by default.

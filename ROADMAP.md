@@ -6,7 +6,7 @@
     * [x] Images
     * [ ] Files
     * [x] Stickers
-  * [ ] Read receipts (currently eagerly-sent since message sync requires "reading" a chat)
+  * [x] Read receipts<sup>[1]</sup>
   * [ ] Room metadata changes
     * [ ] Name
     * [ ] Avatar
@@ -24,9 +24,7 @@
     * [x] Stickers
     * [x] Emoji
   * [ ] Message unsend
-  * [ ] Read receipts
-    * [x] For most recently active chat
-    * [ ] For any chat
+  * [x] Read receipts<sup>[2]</sup>
   * [x] User metadata
     * [ ] Name
       * [x] On sync
@@ -77,31 +75,5 @@
   * [ ] Multiple bridge users
   * [ ] Relay bridging
 
-# Missing features
-## Missing from LINE
-* Typing notifications
-* Message edits
-* Formatted messages
-* Presence
-* Timestamped read receipts
-* Read receipts between users other than yourself
-
-## Missing from LINE on Chrome
-* Unlimited message history
-    * Messages that are very old may not be available in LINE on Chrome at all, even after a full sync
-* Voice/video calls
-    * No notification is sent when a call begins
-    * When a call ends, an automated message of "Your OS version doesn't support this feature" is sent as an ordinary text message from the user who began the call
-* Message redaction (delete/unsend)
-    * But messages unsent from other LINE clients do disappear from LINE on Chrome
-* Replies
-    * Appear as ordinary messages
-* Mentions
-    * Appear as ordinary text
-* Audio message sending
-    * But audio messages can be received
-* Location sending
-    * But locations can be received
-
-## Missing from matrix-puppeteer-line
-* TODO
+<sup>[1]</sup> Requires [MSC2409](https://github.com/matrix-org/matrix-doc/pull/2409). Without it, the bridge will always view incoming LINE messages on your behalf.
+<sup>[2]</sup> LINE read receipts may be bridged later than they actually occur. The more unread chats there are, the longer this delay will be.
