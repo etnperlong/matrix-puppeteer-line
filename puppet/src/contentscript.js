@@ -95,6 +95,7 @@ class MautrixController {
 		this.pinAppearObserver = null
 		this.ownID = null
 
+		this.ownMsgPromise = Promise.resolve(-1)
 		this._promiseOwnMsgReset()
 	}
 
@@ -475,12 +476,19 @@ class MautrixController {
 	}
 
 	/**
+	 * Check if we're waiting for a Matrix-sent message to resolve.
+	 */
+	_isWaitingForOwnMessage() {
+		return !!this.promiseOwnMsgResolve
+	}
+
+	/**
 	 * Wait for a user-sent message to finish getting sent.
 	 *
 	 * @return {Promise<number>} - The ID of the sent message.
 	 */
 	async waitForOwnMessage() {
-		return this.ownMsgPromise ? await this.ownMsgPromise : -1
+		return await this.ownMsgPromise
 	}
 
 	/**
@@ -867,7 +875,7 @@ class MautrixController {
 	addChatListObserver() {
 		this.removeChatListObserver()
 		this.chatListObserver = new MutationObserver(async (mutations) => {
-			if (this.ownMsgPromise) {
+			if (this._isWaitingForOwnMessage()) {
 				// Wait for pending sent messages to be resolved before responding to mutations
 				try {
 					await this.ownMsgPromise
@@ -1213,8 +1221,7 @@ class MautrixController {
 	}
 
 	_observeOwnMessage(ownMsg) {
-		if (!this.ownMsgPromise) {
-			// Not waiting for a pending sent message
+		if (!this._isWaitingForOwnMessage()) {
 			return null
 		}
 
@@ -1299,7 +1306,6 @@ class MautrixController {
 	}
 
 	_promiseOwnMsgReset() {
-		this.ownMsgPromise = null
 		this.promiseOwnMsgSuccessSelector = null
 		this.promiseOwnMsgFailureSelector = null
 		this.promiseOwnMsgResolve = null

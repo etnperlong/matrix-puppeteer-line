@@ -790,7 +790,18 @@ export default class MessagesPuppeteer {
 			// Setting its innerText directly works fine though...
 			await input.click()
 			await input.evaluate((e, text) => e.innerText = text, text)
-			await input.press("Enter")
+			while (true) {
+				await input.press("Enter")
+				try {
+					await this.page.waitForFunction(
+						e => e.innerText == "",
+						{timeout: 500},
+						input)
+					break
+				} catch (e) {
+					this.error(`Failed to press Enter when sending message, try again (${e})`)
+				}
+			}
 		})
 
 		return await this._waitForSentMessage(chatID)
