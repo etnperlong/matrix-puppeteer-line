@@ -30,11 +30,11 @@ const args = arg({
 })
 
 const configPath = args["--config"] || "config.json"
-MessagesPuppeteer.executablePath = args["--browser"] || MessagesPuppeteer.executablePath
-MessagesPuppeteer.noSandbox = args["--no-sandbox"]
 
 console.log("[Main] Reading config from", configPath)
 const config = JSON.parse(fs.readFileSync(configPath).toString())
+MessagesPuppeteer.executablePath = args["--browser"] || config.executable_path || MessagesPuppeteer.executablePath
+MessagesPuppeteer.noSandbox = args["--no-sandbox"] || MessagesPuppeteer.noSandbox
 MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
 MessagesPuppeteer.devtools = config.devtools || false
 MessagesPuppeteer.url = config.url

@@ -3,6 +3,7 @@
 		"type": "unix",
 		"path": "/var/run/matrix-puppeteer-line/puppet.sock"
 	},
+	"executable_path": "",
 	"profile_dir": "./profiles",
 	"url": "chrome-extension://<extension-uuid>/index.html",
 	"extension_dir": "./extension_files",
