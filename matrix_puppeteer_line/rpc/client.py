@@ -13,17 +13,13 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import AsyncGenerator, TypedDict, List, Tuple, Dict, Callable, Awaitable, Any
+from typing import AsyncGenerator, List, Tuple, Dict, Callable, Awaitable, Any
 from collections import deque
 from base64 import b64decode
 import asyncio
 
 from .rpc import RPCClient
 from .types import ChatEvents, ChatListInfo, ChatInfo, ImageData, Message, Participant, Receipt, StartStatus
-
-
-class LoginCommand(TypedDict):
-    content: str
 
 
 class Client(RPCClient):
@@ -113,19 +109,19 @@ class Client(RPCClient):
         data = deque()
         event = asyncio.Event()
 
-        async def qr_handler(req: LoginCommand) -> None:
+        async def qr_handler(req: Dict[str, str]) -> None:
             data.append(("qr", req["url"]))
             event.set()
 
-        async def pin_handler(req: LoginCommand) -> None:
+        async def pin_handler(req: Dict[str, str]) -> None:
             data.append(("pin", req["pin"]))
             event.set()
 
-        async def success_handler(req: LoginCommand) -> None:
+        async def success_handler(req: Dict[str, str]) -> None:
             data.append(("login_success", None))
             event.set()
 
-        async def failure_handler(req: LoginCommand) -> None:
+        async def failure_handler(req: Dict[str, str]) -> None:
             data.append(("login_failure", req.get("reason")))
             event.set()
 

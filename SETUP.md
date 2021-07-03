@@ -1,5 +1,5 @@
 # Minimum Requirements
-* Python 3.8
+* Python 3.7
 * Node 10.18.1
 * yarn 1.22.x
 
