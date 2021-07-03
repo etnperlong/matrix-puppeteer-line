@@ -585,7 +585,7 @@ class Portal(DBPortal, BasePortal):
 
         print(current_members)
 
-        # Kick puppets who shouldn't be here
+        # Puppets who shouldn't be here should leave
         for user_id in await self.main_intent.get_room_members(self.mxid):
             if user_id == self.az.bot_mxid:
                 if forbid_own_puppets and not self.needs_bridgebot:
@@ -594,13 +594,11 @@ class Portal(DBPortal, BasePortal):
 
             mid = p.Puppet.get_id_from_mxid(user_id)
             is_own_puppet = p.Puppet.is_mid_for_own_puppet(mid)
-            if mid and mid not in current_members and not is_own_puppet:
+            if mid and mid not in current_members and not is_own_puppet \
+                or forbid_own_puppets and is_own_puppet:
                 print(mid)
-                await self.main_intent.kick_user(self.mxid, user_id,
-                                                 reason="User had left this chat")
-            elif forbid_own_puppets and is_own_puppet:
-                await self.main_intent.kick_user(self.mxid, user_id,
-                                                 reason="Kicking own puppet")
+                puppet = await p.Puppet.get_by_mxid(user_id)
+                await puppet.intent.leave_room(self.mxid)
 
     async def backfill(self, source: 'u.User', info: ChatInfo) -> None:
         try:
