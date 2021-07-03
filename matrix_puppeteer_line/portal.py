@@ -629,11 +629,13 @@ class Portal(DBPortal, BasePortal):
             await self._cleanup_noid_msgs()
 
 
+        # Need to update participants even for DMs, to kick own puppet if needed
+        await self._update_participants(info.participants)
+
         if not self.is_direct:
             # Update participants before sending any receipts
             # TODO Joins and leaves are (usually) shown after all, so track them properly.
             #      In the meantime, just check the participants list after backfilling.
-            await self._update_participants(info.participants)
             for evt in messages:
                 if evt.is_outgoing and evt.receipt_count:
                     await self.handle_remote_message(source, evt, handle_receipt=False)
