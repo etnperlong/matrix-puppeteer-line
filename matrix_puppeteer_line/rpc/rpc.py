@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Dict, Any, Callable, Awaitable, List, Optional, Tuple
+from typing import Dict, Any, Callable, Awaitable, List, Optional
 import logging
 import asyncio
 import json
@@ -158,10 +158,10 @@ class RPCClient:
                 try:
                     line += await self._reader.readuntil()
                     break
-                except asyncio.exceptions.IncompleteReadError as e:
+                except asyncio.IncompleteReadError as e:
                     line += e.partial
                     break
-                except asyncio.exceptions.LimitOverrunError as e:
+                except asyncio.LimitOverrunError as e:
                     self.log.warning(f"Buffer overrun: {e}")
                     line += await self._reader.read(self._reader._limit)
             if not line:
