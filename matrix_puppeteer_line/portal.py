@@ -30,6 +30,7 @@ from mautrix.types import (EventID, MessageEventContent, RoomID, EventType, Mess
                            ContentURI, EncryptedFile, ImageInfo,
                            RelatesTo, RelationType)
 from mautrix.errors import IntentError
+from mautrix.errors.request import MatrixRequestError
 from mautrix.util.simple_lock import SimpleLock
 
 from .db import Portal as DBPortal, Message as DBMessage, Receipt as DBReceipt, ReceiptReaction as DBReceiptReaction, Media as DBMedia
@@ -370,7 +371,10 @@ class Portal(DBPortal, BasePortal):
             if evt.member_info.joined:
                 await intent.ensure_joined(self.mxid)
             elif evt.member_info.left:
-                await intent.leave_room(self.mxid)
+                try:
+                    await intent.leave_room(self.mxid)
+                except MatrixRequestError as e:
+                    self.log.warn(f"Puppet for user {evt.sender.id} already left portal {self.mxid}")
             event_id = None
         else:
             content = TextMessageEventContent(
