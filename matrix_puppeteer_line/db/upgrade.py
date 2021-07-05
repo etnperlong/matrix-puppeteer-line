@@ -165,3 +165,8 @@ async def upgrade_latest_read_receipts(conn: Connection) -> None:
             REFERENCES message (mid, chat_id)
             ON DELETE CASCADE
     )""")
+
+
+@upgrade_table.register(description="Allow messages with no mxid")
+async def upgrade_nomxid_msgs(conn: Connection) -> None:
+    await conn.execute("ALTER TABLE message ALTER COLUMN mxid DROP NOT NULL")

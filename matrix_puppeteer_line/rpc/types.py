@@ -59,14 +59,22 @@ class MessageImage(SerializableAttrs['MessageImage']):
 
 
 @dataclass
+class MemberInfo(SerializableAttrs['MemberInfo']):
+    invited: bool
+    joined: bool
+    left: bool
+
+
+@dataclass
 class Message(SerializableAttrs['Message']):
     id: Optional[int]
     chat_id: int
     is_outgoing: bool
     sender: Optional[Participant]
-    timestamp: int = None
+    timestamp: Optional[int] = None
     html: Optional[str] = None
     image: Optional[MessageImage] = None
+    member_info: Optional[MemberInfo] = None
     receipt_count: Optional[int] = None
 
 

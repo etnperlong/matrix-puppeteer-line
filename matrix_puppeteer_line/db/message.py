@@ -27,7 +27,7 @@ fake_db = Database("") if TYPE_CHECKING else None
 class Message:
     db: ClassVar[Database] = fake_db
 
-    mxid: EventID
+    mxid: Optional[EventID]
     mx_room: RoomID
     mid: Optional[int]
     chat_id: str

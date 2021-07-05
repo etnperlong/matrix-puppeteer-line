@@ -242,13 +242,17 @@ class Portal(DBPortal, BasePortal):
             else:
                 self.log.info(f"Using bridgebot for unknown sender of message {evt.id or 'with no ID'}")
                 intent = self.az.intent
-            await intent.ensure_joined(self.mxid)
+            if not evt.member_info:
+                await intent.ensure_joined(self.mxid)
 
         if evt.id:
             msg = await DBMessage.get_next_noid_msg(self.mxid)
             if not msg:
                 self.log.info(f"Handling new message {evt.id} in chat {self.mxid}")
                 prev_event_id = None
+            elif not msg.mxid:
+                self.log.error(f"Preseen message {evt.id} in chat {self.mxid} has no mxid")
+                return
             else:
                 self.log.info(f"Handling preseen message {evt.id} in chat {self.mxid}: {msg.mxid}")
                 if not self.is_direct:
@@ -360,9 +364,14 @@ class Portal(DBPortal, BasePortal):
                 format=Format.HTML if msg_html else None,
                 body=msg_text, formatted_body=msg_html)
             event_id = await self._send_message(intent, content, timestamp=evt.timestamp)
-        # TODO Joins/leaves/invites/rejects, which are sent as LINE message events after all!
-        #      Also keep track of strangers who leave / get blocked / become friends
-        #      (maybe not here for all of that)
+        elif evt.member_info:
+            # TODO Track invites. Both LINE->LINE and Matrix->LINE
+            # TODO Make use of evt.timestamp, but how?
+            if evt.member_info.joined:
+                await intent.ensure_joined(self.mxid)
+            elif evt.member_info.left:
+                await intent.leave_room(self.mxid)
+            event_id = None
         else:
             content = TextMessageEventContent(
                 msgtype=MessageType.NOTICE,
@@ -375,10 +384,9 @@ class Portal(DBPortal, BasePortal):
             msg = DBMessage(mxid=event_id, mx_room=self.mxid, mid=evt.id, chat_id=self.chat_id, is_outgoing=evt.is_outgoing)
             try:
                 await msg.insert()
-                #await self._send_delivery_receipt(event_id)
-                self.log.debug(f"Handled remote message {evt.id or 'with no ID'} -> {event_id}")
+                self.log.debug(f"Handled remote message {evt.id or 'with no ID'} -> {event_id or 'with no mxid'}")
             except UniqueViolationError as e:
-                self.log.debug(f"Failed to handle remote message {evt.id or 'with no ID'} -> {event_id}: {e}")
+                self.log.debug(f"Failed to handle remote message {evt.id or 'with no ID'} -> {event_id or 'with no mxid'}: {e}")
         else:
             await msg.update_ids(new_mxid=event_id, new_mid=evt.id)
             self.log.debug(f"Handled preseen remote message {evt.id} -> {event_id}")

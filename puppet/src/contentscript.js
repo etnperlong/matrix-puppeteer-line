@@ -160,25 +160,25 @@ class MautrixController {
 	}
 
 	/**
-	 * Try to match a user against an entry in the friends list to get their ID.
-	 *
-	 * @param {string} senderName - The display name of the user to find the ID for.
-	 * @return {?string}          - The user's ID if found.
-	 */
-	getUserIdFromFriendsList(senderName) {
-		return document.querySelector(`#contact_wrap_friends > ul > li[title='${senderName}']`)?.getAttribute("data-mid")
-	}
-
-	/**
 	 * @typedef MessageData
 	 * @type {object}
 	 * @property {number}  id          - The ID of the message. Seems to be sequential.
-	 * @property {number}  timestamp   - The unix timestamp of the message. Accurate to the minute.
+	 * @property {?number} timestamp   - The unix timestamp of the message. Accurate to the minute.
 	 * @property {boolean} is_outgoing - Whether or not this user sent the message.
 	 * @property {?Participant} sender - Full data of the participant who sent the message, if needed and available.
 	 * @property {?string} html        - The HTML format of the message, if necessary.
 	 * @property {?ImageInfo} image    - Information of the image in the message, if it's an image-only message.
+	 * @property {?MemberInfo} member_info - Change to the membership status of a participant.
 	 * @property {?number} receipt_count  - The number of users who have read the message.
+	 */
+
+	/**
+	 * @typedef MemberInfo
+	 * @type {object}
+	 * @property {boolean} invited
+	 * @property {boolean} joined
+	 * @property {boolean} left
+	 * TODO Any more? How about kicked?
 	 */
 
 	/**
@@ -203,6 +203,143 @@ class MautrixController {
 	}
 
 	/**
+	 * Strip dimension values from an image URL, if needed.
+	 *
+	 * @param {string} src
+	 * @return {string}
+	 */
+	_getComparableImageURL(src) {
+		return this._isLoadedImageURL(src) ? src : src.replace(/\d+x\d+/, "-x-")
+	}
+
+	/**
+	 * Try to match a Participant against an entry in the friends list,
+	 * and set any unset properties of the Participant based on the matched item.
+	 * Match on name first (since it's always available), then on avatar and ID (since there
+	 * may be multiple matching names).
+	 *
+	 * @param {Participant} participant - The Participant to find a match for, and set properties of.
+	 * @return {boolean} - Whether or not a match was found.
+	 * @private
+	 */
+	_updateSenderFromFriendsList(participant) {
+		let targetElement
+		const elements = document.querySelectorAll(`#contact_wrap_friends > ul > li[title='${participant.name}']`)
+		if (elements.length == 0) {
+			return false
+		} else if (elements.length == 1) {
+			targetElement = elements[0]
+		} else if (participant.avatar) {
+			const url = this._getComparableImageURL(participant.avatar.url)
+			// Look for multiple matching avatars, just in case.
+			// Could reasonably happen with "noimg" placeholder avatars.
+			const filteredElements = elements.filter(element => {
+				const pathImg = this.getFriendsListItemAvatar(element)
+				return pathImg && this._getComparableImageURL(pathImg.url) == url
+			})
+			if (filteredElements.length == 1) {
+				targetElement = filteredElements[0]
+			} else if (filteredElements.length != 0) {
+				elements = filteredElements
+			}
+		}
+		if (!targetElement && participant.id) {
+			const idElement = elements.find(element => this.getFriendsListItemID(element) == participant.id)
+			if (idElement) {
+				targetElement = idElement
+			}
+		}
+
+		if (!targetElement) {
+			targetElement = elements[0]
+			console.warn(`Multiple matching friends found for "${participant.name}", so using first match`)
+		}
+		if (!participant.avatar) {
+			participant.avatar = this.getFriendsListItemAvatar(targetElement)
+		}
+		if (!participant.id) {
+			participant.id = this.getFriendsListItemID(targetElement)
+		}
+		return true
+	}
+
+	/**
+	 * Try to match a Participant against an entry in the current chat's participant list,
+	 * and set any unset properties of the Participant based on the matched item.
+	 * Match on name first (since it's always available), then on avatar and ID (since there
+	 * may be multiple matching names).
+	 *
+	 * @param {Participant} participant - The Participant to find a match for, and set properties of.
+	 * @return {boolean} - Whether or not a match was found.
+	 * @private
+	 */
+	_updateSenderFromParticipantList(participant) {
+		let targetElement
+		const participantsList = document.querySelector(SEL_PARTICIPANTS_LIST)
+		// Groups use a participant's name as the alt text of their avatar image,
+		// but rooms do not...ARGH! But they both use a dedicated element for it.
+		const elements =
+			Array.from(participantsList.querySelectorAll(".mdRGT13Ttl"))
+			.filter(e => e.innerText == participant.name)
+			.map(e => e.parentElement)
+		if (elements.length == 0) {
+			return false
+		} else if (elements.length == 1) {
+			targetElement = elements[0]
+		} else if (participant.avatar) {
+			const url = this._getComparableImageURL(participant.avatar.url)
+			// Look for multiple matching avatars, just in case.
+			// Could reasonably happen with "noimg" placeholder avatars.
+			const filteredElements = elements.filter(element => {
+				const pathImg = this.getParticipantListItemAvatar(element)
+				return pathImg && this._getComparableImageURL(pathImg.url) == url
+			})
+			if (filteredElements.length == 1) {
+				targetElement = filteredElements[0]
+			} else if (filteredElements.length != 0) {
+				elements = filteredElements
+			}
+		}
+		if (!targetElement && participant.id) {
+			// This won't work for rooms, where participant list items don't have IDs,
+			// but keep this around in case they ever do...
+			const idElement = elements.find(element => this.getParticipantListItemID(element) == participant.id)
+			if (idElement) {
+				targetElement = idElement
+			}
+		}
+		// TODO Look at the list of invited participants if no match found
+
+		if (!targetElement) {
+			targetElement = elements[0]
+			console.warn(`Multiple matching participants found for "${participant.name}", so using first match`)
+		}
+		if (!participant.avatar) {
+			participant.avatar = this.getParticipantListItemAvatar(targetElement)
+		}
+		if (!participant.id) {
+			participant.id = this.getParticipantListItemID(targetElement)
+		}
+		return true
+	}
+
+	/**
+	 * Use the friends/participant list to update a Participant's information.
+	 * Try the friends list first since the particpant list for rooms doesn't have user IDs...
+	 *
+	 * @param {Participant} participant - The participant whose information should be updated.
+	 * @private
+	 */
+	_updateSenderFromMatch(participant) {
+		if (!this._updateSenderFromFriendsList(participant)) {
+			if (!this._updateSenderFromParticipantList(participant)) {
+				console.warn(`No matching item found for "${participant.name}"`)
+			}
+		}
+	}
+
+
+	/**
 	 * Parse a message element.
 	 *
 	 * @param {Element} element - The message element.
@@ -213,7 +350,7 @@ class MautrixController {
 	 */
 	async _parseMessage(element, chatType, refDate) {
 		const is_outgoing = element.classList.contains("mdRGT07Own")
-		let sender = {}
+		let sender
 
 		const receipt = element.querySelector(".mdRGT07Own .mdRGT07Read:not(.MdNonDisp)")
 		let receipt_count
@@ -223,30 +360,11 @@ class MautrixController {
 			sender = null
 			receipt_count = is_outgoing ? (receipt ? 1 : 0) : null
 		} else if (!is_outgoing) {
-			let imgElement
-			sender.name = element.querySelector(".mdRGT07Body > .mdRGT07Ttl").innerText
-			// Room members are always friends (right?),
-			// so search the friend list for the sender's name
-			// and get their ID from there.
-			sender.id = this.getUserIdFromFriendsList(sender.name)
-			// Group members aren't necessarily friends,
-			// but the participant list includes their ID.
-			// ROOMS DO NOT!! Ugh.
-			if (!sender.id) {
-				const participantsList = document.querySelector(SEL_PARTICIPANTS_LIST)
-				// Groups use a participant's name as the alt text of their avatar image,
-				// but rooms do not...ARGH! But they both use a dedicated element for it.
-				const participantNameElement =
-					Array.from(participantsList.querySelectorAll(`.mdRGT13Ttl`))
-					.find(e => e.innerText == sender.name)
-				if (participantNameElement) {
-					imgElement = participantNameElement.previousElementSibling.firstElementChild
-					sender.id = imgElement?.parentElement.parentElement.getAttribute("data-mid")
-				}
-			} else {
-				imgElement = element.querySelector(".mdRGT07Img > img")
+			sender = {
+				name: element.querySelector(".mdRGT07Body > .mdRGT07Ttl").innerText,
+				avatar: this._getPathImage(element.querySelector(".mdRGT07Img > img"))
 			}
-			sender.avatar = this._getPathImage(imgElement)
+			this._updateSenderFromMatch(sender)
 			receipt_count = null
 		} else {
 			// TODO Get own ID and store it somewhere appropriate.
@@ -258,10 +376,11 @@ class MautrixController {
 			// 	sender = participantsList.children[0].getAttribute("data-mid")
 			// }
 			const participantsList = document.querySelector(SEL_PARTICIPANTS_LIST)
-			sender.name = this.getParticipantListItemName(participantsList.children[0])
-			sender.avatar = this.getParticipantListItemAvatar(participantsList.children[0])
-			sender.id = this.ownID
-
+			sender = {
+				name: this.getParticipantListItemName(participantsList.children[0]),
+				avatar: this.getParticipantListItemAvatar(participantsList.children[0]),
+				id: this.ownID
+			}
 			receipt_count = receipt ? this._getReceiptCount(receipt) : null
 		}
 
@@ -451,6 +570,35 @@ class MautrixController {
 
 
 	/**
+	 * Parse a member event element.
+	 *
+	 * @param {Element} element - The message element.
+	 * @return {?MessageData}   - A valid MessageData with member_info set, or null if no membership info is found.
+	 * @private
+	 */
+	_tryParseMemberEvent(element) {
+		const memberMatch = element.querySelector("time.preline")?.innerText?.match(/(.*) (joined|left)/)
+		if (memberMatch) {
+			const sender = {name: memberMatch[1]}
+			this._updateSenderFromMatch(sender)
+			return {
+				id: +element.getAttribute("data-local-id"),
+				is_outgoing: false,
+				sender: sender,
+				member_info: {
+					invited: false, // TODO Handle invites. Its puppet must not auto-join, though!
+					joined: memberMatch[2] == "joined",
+					left: memberMatch[2] == "left",
+					// TODO Any more? How about kicked?
+				}
+			}
+		} else {
+			return null
+		}
+	}
+
+
+	/**
 	 * Create and store a promise that resolves when a message written
 	 * by the user finishes getting sent.
 	 * Accepts selectors for elements that become visible once the message
@@ -502,6 +650,20 @@ class MautrixController {
 	 */
 
 	/**
+	 * Find the reference date indicator nearest to the given element in the timeline.
+	 * @param {Element} fromElement
+	 * @return {Promise<?Date>} - The value of the nearest date separator.
+	 * @private
+	 */
+	async _getNearestRefDate(fromElement) {
+		let element = fromElement.previousElementSibling
+		while (element && !element.classList.contains("mdRGT10Date")) {
+			element = element.previousElementSibling
+		}
+		return element ? await this._tryParseDateSeparator(element.firstElementChild.innerText) : null
+	}
+
+	/**
 	 * Parse the message list of whatever the currently-viewed chat is.
 	 *
 	 * @param {?number} minID - The minimum message ID to consider.
@@ -511,26 +673,60 @@ class MautrixController {
 		console.debug(`minID for full refresh: ${minID}`)
 		const msgList =
 			Array.from(document.querySelectorAll("#_chat_room_msg_list > div[data-local-id]"))
-			.filter(msg =>
-				msg.hasAttribute("data-local-id") &&
-				(!msg.classList.contains("MdRGT07Cont") || msg.getAttribute("data-local-id") > minID))
+			.filter(msg => msg.getAttribute("data-local-id") > minID)
 		if (msgList.length == 0) {
 			return []
 		}
 		const messagePromises = []
 		const chatType = this.getChatType(this.getCurrentChatID())
-		let refDate = null
+		let refDate
+
 		for (const child of msgList) {
 			if (child.classList.contains("mdRGT10Date")) {
 				refDate = await this._tryParseDateSeparator(child.firstElementChild.innerText)
 			} else if (child.classList.contains("MdRGT07Cont")) {
+				if (refDate === undefined) {
+					refDate = this._getNearestRefDate(child)
+				}
 				messagePromises.push(this._parseMessage(child, chatType, refDate))
+			} else if (child.classList.contains("MdRGT10Notice")) {
+				const memberEventMessage = this._tryParseMemberEvent(child)
+				if (memberEventMessage) {
+					// If a member event is the first message to be discovered,
+					// scan backwards for the nearest message before it, and use
+					// that message's timestamp as the timestamp of this event.
+					if (messagePromises.length == 0) {
+						let element = child.previousElementSibling
+						let timeElement
+						while (element && (!element.getAttribute("data-local-id") || !(timeElement = element.querySelector("time")))) {
+							element = element.previousElementSibling
+						}
+						if (element) {
+							if (refDate === undefined) {
+								refDate = this._tryFindNearestRefDate(child)
+							}
+							memberEventMessage.timestamp = (await this._tryParseDate(timeElement.innerText, refDate))?.getTime()
+						}
+					}
+					messagePromises.push(Promise.resolve(memberEventMessage))
+				}
 			}
 		}
 		// NOTE No message should ever time out, but use allSettled to not throw if any do
-		return (await Promise.allSettled(messagePromises))
+		const messages = (await Promise.allSettled(messagePromises))
 		.filter(value => value.status == "fulfilled")
 		.map(value => value.value)
+
+		// Set the timestamps of each member event to that of the message preceding it,
+		// as a best-guess of its timestamp, since member events have no timestamps.
+		// Do this after having resolved messages.
+		for (let i = 1, n = messages.length; i < n; i++) {
+			if (messages[i].member_info) {
+				messages[i].timestamp = messages[i-1].timestamp
+			}
+		}
+
+		return messages
 	}
 
 	/**
@@ -627,11 +823,25 @@ class MautrixController {
 	}
 
 	getParticipantListItemAvatar(element) {
-		return this._getPathImage(element.querySelector(".mdRGT13Img img[src]"))
+		// Has data-picture-path for rooms, but not groups
+		return this._getPathImage(element.querySelector(".mdRGT13Img > img[src]"))
 	}
 
 	getParticipantListItemID(element) {
-		// TODO Cache own ID
+		// Exists for groups, but not rooms
+		return element.getAttribute("data-mid")
+	}
+
+	getFriendsListItemName(element) {
+		return element.title
+	}
+
+	getFriendsListItemAvatar(element) {
+		// Never has data-picture-path, but still find a PathImage in case it ever does
+		return this._getPathImage(element.querySelector(".mdCMN04Img > img[src]"))
+	}
+
+	getFriendsListItemID(element) {
 		return element.getAttribute("data-mid")
 	}
 
@@ -655,13 +865,15 @@ class MautrixController {
 		}
 
 		return [ownParticipant].concat(Array.from(element.children).slice(1).map(child => {
-			const name = this.getParticipantListItemName(child)
-			const id = this.getParticipantListItemID(child) || this.getUserIdFromFriendsList(name)
-			return {
-				id: id,
+			const sender = {
+				name: this.getParticipantListItemName(child),
 				avatar: this.getParticipantListItemAvatar(child),
-				name: name,
 			}
+			sender.id = this.getParticipantListItemID(child)
+			if (!sender.id) {
+				this._updateSenderFromFriendsList(sender)
+			}
+			return sender
 		}))
 	}
 
