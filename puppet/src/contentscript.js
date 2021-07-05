@@ -193,7 +193,7 @@ class MautrixController {
 	 * Return whether a URL points to a loaded image or not.
 	 *
 	 * @param {string} src
-	 * @return boolean
+	 * @return {boolean}
 	 * @private
 	 */
 	_isLoadedImageURL(src) {
@@ -314,7 +314,7 @@ class MautrixController {
 
 	/**
 	 * @param {Element} msgSpan
-	 * @return Promise<DOMString>
+	 * @return {Promise<DOMString>}
 	 * @private
 	 */
 	async _parseMessageHTML(msgSpan) {
@@ -441,6 +441,7 @@ class MautrixController {
 	 * Don't look for "Read" specifically, to support multiple languages.
 	 *
 	 * @param {Element} receipt - The element containing the receipt message.
+	 * @return {number}
 	 * @private
 	 */
 	_getReceiptCount(receipt) {
@@ -477,6 +478,8 @@ class MautrixController {
 
 	/**
 	 * Check if we're waiting for a Matrix-sent message to resolve.
+	 * @return {boolean}
+	 * @private
 	 */
 	_isWaitingForOwnMessage() {
 		return !!this.promiseOwnMsgResolve
@@ -595,6 +598,7 @@ class MautrixController {
 	/**
 	 * @param {Element} img - The image element to get the URL and path of.
 	 * @return {?PathImage} - The image URL and its path, if found.
+	 * @private
 	 */
 	_getPathImage(img) {
 		if (img && img.src.startsWith("blob:")) {
@@ -792,7 +796,7 @@ class MautrixController {
 	 * Wait an additional bit of time every time an update is observed.
 	 * TODO Look (harder) for an explicit signal of when a chat is fully updated...
 	 *
-	 * @returns Promise<void>
+	 * @return {Promise<void>}
 	 */
 	waitForMessageListStability() {
 		// Increase this if messages get missed on sync / chat change.
@@ -998,6 +1002,7 @@ class MautrixController {
 	 * @param {number} id
 	 * @param {boolean} returnClosest - If true, return the index of the nearest result on miss instead of -1.
 	 * @return {number} The index of the matched element, or -1 if not found.
+	 * @private
 	 */
 	_findMsgsForID(
 		sortedSameIDMsgs, id, returnClosest = false,
@@ -1033,6 +1038,7 @@ class MautrixController {
 	 * @param {SameIDMsgs[]} sortedSameIDMsgs
 	 * @param {PendingMessage} msg
 	 * @return {SameIDMsgs}
+	 * @private
 	 */
 	_insertMsgByID(sortedSameIDMsgs, msg) {
 		let i = this._findMsgsForID(sortedSameIDMsgs, msg.id, true)
