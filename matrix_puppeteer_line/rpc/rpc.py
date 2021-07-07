@@ -60,10 +60,22 @@ class RPCClient:
             return
 
         if self.config["puppeteer.connection.type"] == "unix":
-            r, w = await asyncio.open_unix_connection(self.config["puppeteer.connection.path"])
+            while True:
+                try:
+                    r, w = await asyncio.open_unix_connection(self.config["puppeteer.connection.path"])
+                    break
+                except:
+                    self.log.warn(f'No unix socket available at {self.config["puppeteer.connection.path"]}, wait for it to exist...')
+                    await asyncio.sleep(10)
         elif self.config["puppeteer.connection.type"] == "tcp":
-            r, w = await asyncio.open_connection(self.config["puppeteer.connection.host"],
-                                                 self.config["puppeteer.connection.port"])
+            while True:
+                try:
+                    r, w = await asyncio.open_connection(self.config["puppeteer.connection.host"],
+                                                         self.config["puppeteer.connection.port"])
+                    break
+                except:
+                    self.log.warn(f'No TCP connection open at {self.config["puppeteer.connection.host"]}:{self.config["puppeteer.connection.path"]}, wait for it to become available...')
+                    await asyncio.sleep(10)
         else:
             raise RuntimeError("invalid puppeteer connection type")
         self._reader = r
