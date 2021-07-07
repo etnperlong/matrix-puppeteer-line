@@ -49,13 +49,13 @@
     * [x] Groups (named chats)
     * [x] Rooms (unnamed chats / "multi-user direct chats")
   * [ ] Membership actions
-    * [ ] Join
+    * [x] Join
       * [x] When message is sent by new participant
       * [x] On sync
-      * [ ] At join time
-    * [ ] Leave
+      * [x] At join time
+    * [x] Leave
       * [x] On sync
-      * [ ] At leave time
+      * [x] At leave time
     * [ ] Invite
     * [ ] Remove
   * [ ] Friend actions
