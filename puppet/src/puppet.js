@@ -781,7 +781,7 @@ export default class MessagesPuppeteer {
 		await this._syncChat(chatID)
 		// TODO Initiate the promise in the content script
 		await this.page.evaluate(
-			() => window.__mautrixController.promiseOwnMessage(5000, "time"))
+			() => window.__mautrixController.promiseOwnMessage(15000, "time"))
 
 		const input = await this.page.$("#_chat_room_input")
 		await this._interactWithPage(async () => {
@@ -811,7 +811,7 @@ export default class MessagesPuppeteer {
 		await this._syncChat(chatID)
 		await this.page.evaluate(
 			() => window.__mautrixController.promiseOwnMessage(
-				10000, // Use longer timeout for file uploads
+				30000, // Use longer timeout for file uploads
 				"#_chat_message_success_menu",
 				"#_chat_message_fail_menu"))
 
