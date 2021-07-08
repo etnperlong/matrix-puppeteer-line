@@ -102,9 +102,18 @@ export default class MessagesPuppeteer {
 			this.page = await this.browser.newPage()
 		}
 
-		this.blankPage = await this.browser.newPage()
-		await this.page.bringToFront()
+		{
+			this.log("Finding extension UUID")
+			await this.page.goto("chrome://system")
+			const selector = "#extensions-value"
+			await this.page.waitForSelector(selector, 0)
+			const lineDetails = await this.page.$eval(selector, e => e.innerText)
+			const uuid = lineDetails.match(/(.*) : LINE : version/)[1]
+			this.log("Found extension UUID ${uuid}")
+			MessagesPuppeteer.url = `chrome-extension://${uuid}/index.html`
+		}
 
+		this.blankPage = await this.browser.newPage()
 		if (MessagesPuppeteer.useXdotool) {
 			this.log("Finding window ID")
 			const buffer = execSync("xdotool search 'about:blank'")

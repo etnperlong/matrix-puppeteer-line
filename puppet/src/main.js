@@ -37,7 +37,6 @@ MessagesPuppeteer.executablePath = args["--browser"] || config.executable_path |
 MessagesPuppeteer.noSandbox = args["--no-sandbox"] || MessagesPuppeteer.noSandbox
 MessagesPuppeteer.profileDir = config.profile_dir || MessagesPuppeteer.profileDir
 MessagesPuppeteer.devtools = config.devtools || false
-MessagesPuppeteer.url = config.url
 MessagesPuppeteer.extensionDir = config.extension_dir || MessagesPuppeteer.extensionDir
 MessagesPuppeteer.cycleDelay = config.cycle_delay || MessagesPuppeteer.cycleDelay
 MessagesPuppeteer.useXdotool = config.use_xdotool || MessagesPuppeteer.useXdotool

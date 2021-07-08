@@ -9,9 +9,6 @@ The `executable_path` specifies the path to the Chromium binary for Puppeteer to
 ### Profile directory
 The `profile_dir` specifies which directory to put Chromium user data directories.
 
-### URL
-`url` specifies the URL of the index page of the LINE extension for your Chromium installation.
-
 ### Extension directory
 The `extension_dir` specifies which directory contains the files for the LINE extension, which you must download yourself.
 
