@@ -1,0 +1,13 @@
+{
+	"listen": {
+		"type": "unix",
+		"path": "/data/puppet.sock"
+	},
+	"executable_path": "/usr/lib/chromium/chrome",
+	"profile_dir": "./profiles",
+	"extension_dir": "/data/extension_files",
+	"cycle_delay": 5000,
+	"use_xdotool": true,
+	"jiggle_delay": 20000,
+	"devtools": false
+}

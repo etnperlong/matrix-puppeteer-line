@@ -1,17 +1,22 @@
-FROM node:14-alpine3.12
+FROM node:16-alpine3.14
 
-RUN echo $'\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/main\n\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/testing\n\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/community' >> /etc/apk/repositories
+ARG TARGETARCH=amd64
 
-RUN apk add --no-cache chromium@edge
+RUN apk add --no-cache chromium xvfb-run xdotool
 
 WORKDIR /opt/matrix-puppeteer-line/puppet
-RUN chown node:node /opt/matrix-puppeteer-line/puppet
-USER node
+
+# Want to use same UID as Python process so the Unix socket can be shared.
+# But yarn hits snags if there is no user for the UID it's run under.
+RUN adduser -Du 1337 --gecos "" line
+
+VOLUME /data
+
+RUN chown 1337:1337 .
+USER 1337
 COPY package.json yarn.lock ./
 RUN yarn --production && rm -rf node_modules/puppeteer/.local-chromium
 
-COPY . /opt/matrix-puppeteer-line/puppet
-CMD ["yarn", "start", "--config", "/data/config.json", "--browser", "/usr/lib/chromium/chrome", "--no-sandbox"]
+COPY src src
+COPY docker-run.sh example-config-docker.json ./
+CMD ["./docker-run.sh"]

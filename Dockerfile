@@ -1,49 +1,46 @@
-FROM alpine:3.12
+FROM alpine:3.14
 
 ARG TARGETARCH=amd64
 
-RUN echo $'\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/main\n\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/testing\n\
-@edge http://dl-cdn.alpinelinux.org/alpine/edge/community' >> /etc/apk/repositories
-
 RUN apk add --no-cache \
       python3 py3-pip py3-setuptools py3-wheel \
-      py3-virtualenv \
       py3-pillow \
       py3-aiohttp \
       py3-magic \
       py3-ruamel.yaml \
-      py3-commonmark@edge \
-      # Other dependencies
-      ca-certificates \
-      su-exec \
+      py3-commonmark \
       # encryption
-      olm-dev \
+      py3-olm \
       py3-cffi \
-	  py3-pycryptodome \
+      py3-pycryptodome \
       py3-unpaddedbase64 \
       py3-future \
+      # Other dependencies
+      ca-certificates \
       bash \
       curl \
-      jq && \
-  curl -sLo yq https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_${TARGETARCH} && \
-  chmod +x yq && mv yq /usr/bin/yq
+      jq \
+      yq
 
-
-COPY requirements.txt /opt/matrix-puppeteer-line/requirements.txt
-COPY optional-requirements.txt /opt/matrix-puppeteer-line/optional-requirements.txt
 WORKDIR /opt/matrix-puppeteer-line
+
+COPY requirements.txt optional-requirements.txt ./
 RUN apk add --virtual .build-deps python3-dev libffi-dev build-base \
  && pip3 install -r requirements.txt -r optional-requirements.txt \
  && apk del .build-deps
 
-COPY . /opt/matrix-puppeteer-line
-RUN apk add git && pip3 install .[e2be] && apk del git \
+COPY LICENSE setup.py ./
+COPY matrix_puppeteer_line matrix_puppeteer_line
+RUN apk add --no-cache git && pip3 install .[e2be] && apk del git \
   # This doesn't make the image smaller, but it's needed so that the `version` command works properly
   && cp matrix_puppeteer_line/example-config.yaml . && rm -rf matrix_puppeteer_line
 
 VOLUME /data
-ENV UID=1337 GID=1337
 
-CMD ["/opt/matrix-puppeteer-line/docker-run.sh"]
+# Needed to prevent "KeyError: 'getpwuid(): uid not found: 1337'" when connecting to postgres
+RUN adduser -DHu 1337 --gecos "" line
+
+COPY docker-run.sh ./
+RUN chown -R 1337:1337 .
+USER 1337
+CMD ["./docker-run.sh"]
