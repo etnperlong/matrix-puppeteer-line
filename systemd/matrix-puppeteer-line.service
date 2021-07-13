@@ -1,0 +1,14 @@
+[Unit]
+Description=Matrix-puppeteer-line bridge
+BindsTo=matrix-puppeteer-line-chrome.target
+After=matrix-puppeteer-line-chrome.target
+
+[Service]
+; User=matrix-line
+; Group=matrix
+WorkingDirectory=/opt/synapse/bridges/matrix-puppeteer-line
+ExecStart=/opt/synapse/bridges/matrix-puppeteer-line/.venv/bin/python -m matrix_puppeteer_line
+RuntimeDirectory=matrix/puppeteer-line
+
+[Install]
+WantedBy=multi-user.target

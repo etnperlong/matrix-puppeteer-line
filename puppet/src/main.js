@@ -15,6 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import process from "process"
 import fs from "fs"
+import sd from "systemd-daemon"
 
 import arg from "arg"
 
@@ -57,6 +58,7 @@ function stop() {
 api.start().then(() => {
 	process.once("SIGINT", stop)
 	process.once("SIGTERM", stop)
+	sd.notify("READY=1")
 }, err => {
 	console.error("[Main] Error starting:", err)
 	process.exit(2)
