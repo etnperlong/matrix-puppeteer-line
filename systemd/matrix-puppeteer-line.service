@@ -1,0 +1,18 @@
+[Unit]
+Description=matrix-puppeteer-line bridge
+BindsTo=matrix-puppeteer-line-chrome.service
+PartOf=matrix-puppeteer-line-chrome.service
+After=matrix-puppeteer-line-chrome.service
+
+[Service]
+; User=matrix-puppeteer-line
+; Group=matrix-puppeteer-line
+WorkingDirectory=/opt/matrix-puppeteer-line
+ConfigurationDirectory=matrix-puppeteer-line
+RuntimeDirectory=matrix-puppeteer-line
+ExecStart=/opt/matrix-puppeteer-line/.venv/bin/python -m matrix_puppeteer_line -c ${CONFIGURATION_DIRECTORY}/config.yaml
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

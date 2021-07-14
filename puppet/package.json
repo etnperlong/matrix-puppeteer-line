@@ -1,7 +1,7 @@
 {
-  "name": "matrix-puppeteer-line-puppeteer",
+  "name": "matrix-puppeteer-line-chrome",
   "version": "0.1.0",
-  "description": "Puppeteer module for matrix-puppeteer-line",
+  "description": "Chrome/Puppeteer backend for matrix-puppeteer-line",
   "repository": {
     "type": "git",
     "url": "git+https://src.miscworks.net/fair/matrix-puppeteer-line.git"
@@ -20,6 +20,7 @@
   "dependencies": {
     "arg": "^4.1.3",
     "chrono-node": "^2.1.7",
+    "systemd-daemon": "^1.1.2",
     "puppeteer": "9.1.1"
   },
   "devDependencies": {
