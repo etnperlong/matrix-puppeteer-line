@@ -273,13 +273,17 @@ export default class MessagesPuppeteer {
 			() => this._waitForLoginCancel(),
 		].map(promiseFn => cancelableResolve(promiseFn)))
 
-		this.log("Removing observers")
-		// TODO __mautrixController is undefined when cancelling, why?
-		await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.ownID)
-		await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
-		await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
-		await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
-		await this.page.evaluate(() => window.__mautrixController.removePINAppearObserver())
+		if (!this.loginCancelled) {
+			this.log("Removing observers")
+			// TODO __mautrixController is undefined when cancelling, why?
+			await this.page.evaluate(ownID => window.__mautrixController.setOwnID(ownID), this.ownID)
+			await this.page.evaluate(() => window.__mautrixController.removeQRChangeObserver())
+			await this.page.evaluate(() => window.__mautrixController.removeQRAppearObserver())
+			await this.page.evaluate(() => window.__mautrixController.removeEmailAppearObserver())
+			await this.page.evaluate(() => window.__mautrixController.removePINAppearObserver())
+		} else {
+			this.loginCancelled = false
+		}
 		delete this.login_email
 		delete this.login_password
 
@@ -340,6 +344,7 @@ export default class MessagesPuppeteer {
 	 * Close the browser.
 	 */
 	async stop() {
+		this.stopObserving()
 		this.taskQueue.stop()
 		if (this.page) {
 			await this.page.close()
@@ -356,6 +361,9 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<boolean>} - Whether or not the session is logged in.
 	 */
 	async isLoggedIn() {
+		if (!this.page) {
+			return false
+		}
 		const selectors = [
 			"#mainApp:not(.MdNonDisp)",
 			"#wrap_message_sync",
