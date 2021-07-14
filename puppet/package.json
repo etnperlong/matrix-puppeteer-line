@@ -1,7 +1,7 @@
 {
-  "name": "matrix-puppeteer-line-puppeteer",
+  "name": "matrix-puppeteer-line-chrome",
   "version": "0.1.0",
-  "description": "Puppeteer module for matrix-puppeteer-line",
+  "description": "Chrome/Puppeteer backend for matrix-puppeteer-line",
   "repository": {
     "type": "git",
     "url": "git+https://src.miscworks.net/fair/matrix-puppeteer-line.git"
