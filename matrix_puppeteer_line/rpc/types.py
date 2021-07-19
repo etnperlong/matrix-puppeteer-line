@@ -35,8 +35,8 @@ class ChatListInfo(SerializableAttrs['ChatListInfo']):
     id: int
     name: str
     icon: Optional[PathImage]
-    lastMsg: str
-    lastMsgDate: str
+    lastMsg: Optional[str]
+    lastMsgDate: Optional[str]
 
 
 @dataclass

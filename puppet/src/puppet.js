@@ -413,9 +413,19 @@ export default class MessagesPuppeteer {
 	}
 
 	/**
+	 * Get all contacts in the Friends list.
+	 *
+	 * @return {Promise<Participant[]>}
+	 */
+	async getContacts() {
+		return await this.taskQueue.push(() =>
+			this.page.evaluate(() => window.__mautrixController.parseFriendsList()))
+	}
+
+	/**
 	 * Get the IDs of the most recent chats.
 	 *
-	 * @return {Promise<[ChatListInfo]>} - List of chat IDs in order of most recent message.
+	 * @return {Promise<ChatListInfo[]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
 		return await this.taskQueue.push(() =>
@@ -425,7 +435,7 @@ export default class MessagesPuppeteer {
 	/**
 	 * @typedef ChatInfo
 	 * @type object
-	 * @property {[Participant]} participants
+	 * @property {Participant[]} participants
 	 */
 
 	/**
@@ -649,14 +659,32 @@ export default class MessagesPuppeteer {
 		return ownProfile
 	}
 
-	_listItemSelector(id) {
+	_chatItemSelector(id) {
 		return `#_chat_list_body div[data-chatid="${id}"]`
+	}
+
+	_friendItemSelector(id) {
+		return `#contact_wrap_friends > ul > li[data-mid="${id}"]`
 	}
 
 	async _switchChat(chatID, forceView = false) {
 		// TODO Allow passing in an element directly
 		this.log(`Switching to chat ${chatID}`)
-		const chatListItem = await this.page.$(this._listItemSelector(chatID))
+		let chatListItem = await this.page.$(this._chatItemSelector(chatID))
+		if (!chatListItem) {
+			this.log(`Chat ${chatID} not in recents list`)
+			if (chatID.charAt(0) == 'u') {
+				const friendsListItem = await this.page.$(this._friendItemSelector(chatID))
+				if (!friendsListItem) {
+					throw `Cannot find friend with ID ${chatID}`
+				}
+				friendsListItem.evaluate(e => e.click()) // Evaluate in browser context to avoid having to view tab
+			} else {
+				// TODO
+				throw "Can't yet get info of new groups/rooms"
+			}
+			chatListItem = await this.page.waitForSelector(this._chatItemSelector(chatID))
+		}
 
 		const chatName = await chatListItem.evaluate(
 			element => window.__mautrixController.getChatListItemName(element))
@@ -739,10 +767,7 @@ export default class MessagesPuppeteer {
 	}
 
 	async _getChatInfoUnsafe(chatID, forceView) {
-		const chatListInfo = await this.page.$eval(this._listItemSelector(chatID),
-			(element, chatID) => window.__mautrixController.parseChatListItem(element, chatID),
-			chatID)
-
+		// TODO Commonize this
 		let [isDirect, isGroup, isRoom] = [false,false,false]
 		switch (chatID.charAt(0)) {
 		case "u":
@@ -755,6 +780,36 @@ export default class MessagesPuppeteer {
 			isRoom = true
 			break
 		}
+
+		const chatListItem = await this.page.$(this._chatItemSelector(chatID))
+		if (!chatListItem) {
+			if (isDirect) {
+				const friendsListItem = await this.page.$(this._friendItemSelector(chatID))
+				if (!friendsListItem) {
+					throw `Cannot find friend with ID ${chatID}`
+				}
+				const friendsListInfo = await friendsListItem.evaluate(
+					(element, chatID) => window.__mautrixController.parseFriendsListItem(element, chatID),
+					chatID)
+
+				this.log(`Found NEW direct chat with ${chatID}`)
+				return {
+					participants: [friendsListInfo],
+					id: chatID,
+					name: friendsListInfo.name,
+					icon: friendsListInfo.avatar,
+					lastMsg: null,
+					lastMsgDate: null,
+				}
+			} else {
+				// TODO
+				throw "Can't yet get info of new groups/rooms"
+			}
+		}
+
+		const chatListInfo = await chatListItem.evaluate(
+			(element, chatID) => window.__mautrixController.parseChatListItem(element, chatID),
+			chatID)
 
 		let participants
 		if (!isDirect) {

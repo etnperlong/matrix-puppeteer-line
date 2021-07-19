@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Optional, Dict, TYPE_CHECKING, cast
+from typing import Optional, Dict, List, TYPE_CHECKING, cast
 
 from mautrix.bridge import BasePuppet
 from mautrix.types import UserID, ContentURI
@@ -196,8 +196,16 @@ class Puppet(DBPuppet, BasePuppet):
     def is_mid_for_own_puppet(cls, mid) -> bool:
         return mid and mid.startswith("_OWN_")
 
+    @property
+    def is_own_puppet(self) -> bool:
+        return self.mid.startswith("_OWN_")
+
     @classmethod
     async def get_by_custom_mxid(cls, mxid: UserID) -> Optional['u.User']:
         if mxid == cls.config["bridge.user"]:
             return await cls.bridge.get_user(mxid)
         return None
+
+    @classmethod
+    async def get_all(cls) -> List['Puppet']:
+        return [p for p in await super().get_all() if not p.is_own_puppet]

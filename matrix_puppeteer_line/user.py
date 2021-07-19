@@ -132,6 +132,7 @@ class User(DBUser, BaseUser):
             await asyncio.sleep(5)
 
     async def sync(self) -> None:
+        await self.sync_contacts()
         # TODO Use some kind of async lock / event to queue syncing actions
         self.is_syncing = True
         if self._connection_check_task:
@@ -146,20 +147,24 @@ class User(DBUser, BaseUser):
         limit = self.config["bridge.initial_conversation_sync"]
         self.log.info("Syncing chats")
         await self.send_bridge_notice("Synchronizing chats...")
-        chats = await self.client.get_chats()
-        num_created = 0
-        for index, chat in enumerate(chats):
-            portal = await po.Portal.get_by_chat_id(chat.id, create=True)
-            if portal.mxid or num_created < limit:
-                chat = await self.client.get_chat(chat.id)
-                if portal.mxid:
-                    await portal.update_matrix_room(self, chat)
-                else:
-                    await portal.create_matrix_room(self, chat)
-                    num_created += 1
-        await self.send_bridge_notice("Synchronization complete")
+
+        # TODO Since only chat ID is used, retrieve only that
+        chat_infos = await self.client.get_chats()
+        for chat_info in chat_infos[:limit]:
+            portal = await po.Portal.get_by_chat_id(chat_info.id, create=True)
+            chat_info_full = await self.client.get_chat(chat_info.id)
+            await portal.create_matrix_room(self, chat_info_full)
+        await self.send_bridge_notice("Chat synchronization complete")
         await self.client.resume()
         self.is_syncing = False
+
+    async def sync_contacts(self) -> None:
+        await self.send_bridge_notice("Synchronizing contacts...")
+        contacts = await self.client.get_contacts()
+        for contact in contacts:
+            puppet = await pu.Puppet.get_by_mid(contact.id)
+            await puppet.update_info(contact, self.client)
+        await self.send_bridge_notice("Contact synchronization complete")
 
     async def sync_portal(self, portal: 'po.Portal') -> None:
         chat_id = portal.chat_id

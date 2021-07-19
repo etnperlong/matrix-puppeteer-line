@@ -189,6 +189,7 @@ class Portal(DBPortal, BasePortal):
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
                       f"cleaning up and deleting...")
+        # TODO Delete room history in LINE to prevent a re-sync from happening
         await self.cleanup_and_delete()
 
     async def _bridge_own_message_pm(self, source: 'u.User', puppet: Optional['p.Puppet'], mid: str,
@@ -711,12 +712,13 @@ class Portal(DBPortal, BasePortal):
             return await self._create_matrix_room(source, info)
 
     async def _update_matrix_room(self, source: 'u.User', info: ChatInfo) -> None:
+        await self.update_info(info, source.client)
+
         await self.main_intent.invite_user(self.mxid, source.mxid, check_cache=True)
         puppet = await p.Puppet.get_by_custom_mxid(source.mxid)
         if puppet and puppet.intent:
             await puppet.intent.ensure_joined(self.mxid)
 
-        await self.update_info(info, source.client)
         await self.backfill(source, info)
 
     async def _create_matrix_room(self, source: 'u.User', info: ChatInfo) -> Optional[RoomID]:

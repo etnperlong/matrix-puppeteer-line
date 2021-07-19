@@ -261,6 +261,7 @@ export default class Client {
 				pause: () => this.puppet.stopObserving(),
 				resume: () => this.puppet.startObserving(),
 				get_own_profile: () => this.puppet.getOwnProfile(),
+				get_contacts: () => this.puppet.getContacts(),
 				get_chats: () => this.puppet.getRecentChats(),
 				get_chat: req => this.puppet.getChatInfo(req.chat_id, req.force_view),
 				get_messages: req => this.puppet.getMessages(req.chat_id),

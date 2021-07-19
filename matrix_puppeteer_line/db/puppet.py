@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from typing import Optional, ClassVar, TYPE_CHECKING
+from typing import Optional, ClassVar, List, TYPE_CHECKING
 
 from attr import dataclass
 
@@ -61,3 +61,10 @@ class Puppet:
         if not row:
             return None
         return cls(**row)
+
+    @classmethod
+    async def get_all(cls) -> List['Puppet']:
+        q = ("SELECT mid, name, avatar_path, avatar_mxc, name_set, avatar_set, is_registered "
+             "FROM puppet")
+        rows = await cls.db.fetch(q)
+        return [cls(**row) for row in rows]

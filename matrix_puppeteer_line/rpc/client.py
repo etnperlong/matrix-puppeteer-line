@@ -40,6 +40,10 @@ class Client(RPCClient):
     async def get_own_profile(self) -> Participant:
         return Participant.deserialize(await self.request("get_own_profile"))
 
+    async def get_contacts(self) -> List[Participant]:
+        resp = await self.request("get_contacts")
+        return [Participant.deserialize(data) for data in resp]
+
     async def get_chats(self) -> List[ChatListInfo]:
         resp = await self.request("get_chats")
         return [ChatListInfo.deserialize(data) for data in resp]

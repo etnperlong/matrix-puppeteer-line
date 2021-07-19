@@ -67,6 +67,7 @@
     * [x] At startup
     * [x] When receiving invite or message
     * [ ] When sending message in new chat from LINE app
+  * [x] Private chat creation by inviting Matrix puppet of LINE user to new room
   * [x] Notification for message send failure
   * [ ] Provisioning API for logging in
   * [x] Use bridge bot for messages sent from LINE app (when double-puppeting is disabled and `bridge.invite_own_puppet_to_pm` is enabled)

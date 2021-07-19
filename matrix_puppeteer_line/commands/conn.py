@@ -41,6 +41,12 @@ async def ping(evt: CommandEvent) -> None:
 
 
 @command_handler(needs_auth=True, management_only=False, help_section=SECTION_CONNECTION,
-                 help_text="Synchronize portals")
+                 help_text="Synchronize contacts and portals")
 async def sync(evt: CommandEvent) -> None:
     await evt.sender.sync()
+
+
+@command_handler(needs_auth=True, management_only=False, help_section=SECTION_CONNECTION,
+                 help_text="Synchronize contacts")
+async def sync_contacts(evt: CommandEvent) -> None:
+    await evt.sender.sync_contacts()

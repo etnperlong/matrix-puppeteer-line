@@ -52,6 +52,23 @@ class MatrixHandler(BaseMatrixHandler):
             await self.az.intent.send_notice(room_id, "This room has been marked as your "
                                                       "LINE bridge notice room.")
 
+    async def handle_puppet_invite(self, room_id: RoomID, puppet: 'pu.Puppet',
+                                   invited_by: 'u.User', _: EventID) -> None:
+        chat_id = puppet.mid
+        portal = await po.Portal.get_by_chat_id(chat_id, create=True)
+        if portal.mxid:
+            # TODO Allow creating a LINE group/room from a Matrix invite
+            await portal.main_intent.error_and_leave(room_id, "You already have an existing chat with me!")
+            return
+        portal.mxid = room_id
+        # TODO Put pause/resume in portal methods, with a lock or something
+        await invited_by.client.pause()
+        try:
+            chat_info = await invited_by.client.get_chat(chat_id)
+            await portal.update_matrix_room(invited_by, chat_info)
+        finally:
+            await invited_by.client.resume()
+
     async def handle_leave(self, room_id: RoomID, user_id: UserID, event_id: EventID) -> None:
         portal = await po.Portal.get_by_mxid(room_id)
         if not portal:

@@ -846,6 +846,33 @@ class MautrixController {
 	}
 
 	/**
+	 * Parse a friends list item element.
+	 *
+	 * @param {Element} element - The element to parse.
+	 * @param {?string} knownID - The ID of this element, if it is known.
+	 * @return {Participant}    - The info in the element.
+	 */
+	parseFriendsListItem(element, knownID) {
+		return {
+			id: knownID || this.getFriendsListItemID(element),
+			avatar: this.getFriendsListItemAvatar(element),
+			name: this.getFriendsListItemName(element),
+		}
+	}
+
+	/**
+	 * Parse the friends list.
+	 *
+	 * @return {Participant[]}
+	 */
+	parseFriendsList() {
+		const friends = []
+		document.querySelectorAll("#contact_wrap_friends > ul > li[data-mid]")
+		.forEach(e => friends.push(this.parseFriendsListItem(e)))
+		return friends
+	}
+
+	/**
 	 * Parse a group participants list.
 	 * TODO Find what works for a *room* participants list...!
 	 *
