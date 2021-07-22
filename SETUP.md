@@ -22,13 +22,14 @@ These instructions describe how to install and run the bridge manually from a cl
 
 ## Minimum requirements
 * Python 3.7
-* Node 10.18.1
+* Node 14
 * yarn 1.22.x (from either your distribution or `npm`)
 * postgresql 11
 
 ## Optional requirements
 * `xvfb-run` for easily running the Puppeteer module in a background X server
 * `xdotool` for keeping the Puppeteer module responsive when run in a background X server (see [puppet/README.md](puppet/README.md))
+* Native dependencies for [end-to-bridge](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html): https://docs.mau.fi/bridges/python/optional-dependencies.html#all-python-bridges
 
 ## Initial setup
 
@@ -47,6 +48,7 @@ These instructions describe how to install and run the bridge manually from a cl
 1. Install Python requirements:
     * `pip install -Ur requirements.txt` for base functionality
     * `pip install -Ur optional-requirements.txt` for [end-to-bridge](https://docs.mau.fi/bridges/general/end-to-bridge-encryption.html) encryption and metrics
+        * Note that end-to-bridge encryption requires some native dependencies. For details, see https://docs.mau.fi/bridges/python/optional-dependencies.html#all-python-bridges
 1. Copy `matrix_puppeteer_line/example-config.yaml` to `config.yaml`, and update it with the proper settings to connect to your homeserver
     * In particular, be sure to set the `puppeteer.connection` settings to use the socket you chose in `puppet/config.json`
 1. Run `python -m matrix_puppeteer_line -g` to generate an appservice registration file, and update your homeserver configuration to accept it
