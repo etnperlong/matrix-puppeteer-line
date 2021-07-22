@@ -88,6 +88,9 @@ class Client(RPCClient):
     async def set_last_message_ids(self, msg_ids: Dict[str, int], own_msg_ids: Dict[str, int], rct_ids: Dict[str, Dict[int, int]]) -> None:
         await self.request("set_last_message_ids", msg_ids=msg_ids, own_msg_ids=own_msg_ids, rct_ids=rct_ids)
 
+    async def forget_chat(self, chat_id: str) -> None:
+        await self.request("forget_chat", chat_id=chat_id)
+
     async def on_message(self, func: Callable[[Message], Awaitable[None]]) -> None:
         async def wrapper(data: Dict[str, Any]) -> None:
             await func(Message.deserialize(data["message"]))

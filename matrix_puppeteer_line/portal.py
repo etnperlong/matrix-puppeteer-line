@@ -189,7 +189,8 @@ class Portal(DBPortal, BasePortal):
     async def handle_matrix_leave(self, user: 'u.User') -> None:
         self.log.info(f"{user.mxid} left portal to {self.chat_id}, "
                       f"cleaning up and deleting...")
-        # TODO Delete room history in LINE to prevent a re-sync from happening
+        if await user.is_logged_in():
+            await user.client.forget_chat(self.chat_id)
         await self.cleanup_and_delete()
 
     async def _bridge_own_message_pm(self, source: 'u.User', puppet: Optional['p.Puppet'], mid: str,
@@ -501,10 +502,6 @@ class Portal(DBPortal, BasePortal):
         return MediaInfo(mxc, decryption_info, mime_type, file_name, len(data))
 
     async def update_info(self, conv: ChatInfo, client: Optional[Client]) -> None:
-        if self.is_direct:
-            self.other_user = conv.participants[0].id
-            if self._main_intent is self.az.intent:
-                self._main_intent = (await p.Puppet.get_by_mid(self.other_user)).intent
         for participant in conv.participants:
             # REMINDER: multi-user chats include your own LINE user in the participant list
             if participant.id != None:
@@ -806,7 +803,8 @@ class Portal(DBPortal, BasePortal):
         self.by_chat_id[self.chat_id] = self
         if self.mxid:
             self.by_mxid[self.mxid] = self
-        if self.other_user:
+        if self.is_direct:
+            self.other_user = self.chat_id
             self._main_intent = (await p.Puppet.get_by_mid(self.other_user)).intent
         else:
             self._main_intent = self.az.intent

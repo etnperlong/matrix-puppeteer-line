@@ -16,12 +16,12 @@
 from typing import TYPE_CHECKING
 
 from mautrix.bridge import BaseMatrixHandler
-from mautrix.types import (Event, ReactionEvent, MessageEvent, StateEvent, EncryptedEvent, RedactionEvent,
-                           ReceiptEvent, SingleReceiptEventContent,
+from mautrix.types import (Event, EventType, MessageEvent, StateEvent, EncryptedEvent,
+                           ReceiptEvent, SingleReceiptEventContent, TextMessageEventContent,
                            EventID, RoomID, UserID)
+from mautrix.errors import MatrixError
 
 from . import portal as po, puppet as pu, user as u
-from .db import Message as DBMessage
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
@@ -54,17 +54,78 @@ class MatrixHandler(BaseMatrixHandler):
 
     async def handle_puppet_invite(self, room_id: RoomID, puppet: 'pu.Puppet',
                                    invited_by: 'u.User', _: EventID) -> None:
-        chat_id = puppet.mid
-        portal = await po.Portal.get_by_chat_id(chat_id, create=True)
-        if portal.mxid:
-            # TODO Allow creating a LINE group/room from a Matrix invite
-            await portal.main_intent.error_and_leave(room_id, "You already have an existing chat with me!")
+        intent = puppet.intent
+        self.log.debug(f"{invited_by.mxid} invited puppet for {puppet.mid} to {room_id}")
+        if not await invited_by.is_logged_in():
+            await intent.error_and_leave(room_id, text="Please log in before inviting "
+                                                       "LINE puppets to private chats.")
             return
+
+        portal = await po.Portal.get_by_mxid(room_id)
+        if portal:
+            if portal.is_direct:
+                await intent.error_and_leave(room_id, text="You can not invite additional users "
+                                                           "to private chats.")
+            else:
+                # TODO Send invite in LINE
+                await intent.error_and_leave(room_id, text="Inviting additional users to an existing "
+                                                           "group chat is not yet supported.")
+            return
+
+        await intent.join_room(room_id)
+        try:
+            members = await intent.get_room_members(room_id)
+        except MatrixError:
+            self.log.exception(f"Failed to get member list after joining {room_id}")
+            await intent.leave_room(room_id)
+            return
+        if len(members) > 2:
+            # TODO Add LINE group/room creating. Must also distinguish between the two!
+            await intent.send_notice(room_id, "You can not invite LINE puppets to "
+                                              "multi-user rooms.")
+            await intent.leave_room(room_id)
+            return
+
+        portal = await po.Portal.get_by_chat_id(puppet.mid, create=True)
+        if portal.mxid:
+            try:
+                await intent.invite_user(portal.mxid, invited_by.mxid, check_cache=False)
+                await intent.send_notice(room_id,
+                                         text=("You already have a private chat with me "
+                                               f"in room {portal.mxid}"),
+                                         html=("You already have a private chat with me: "
+                                               f"<a href='https://matrix.to/#/{portal.mxid}'>"
+                                               "Link to room"
+                                               "</a>"))
+                await intent.leave_room(room_id)
+                return
+            except MatrixError:
+                pass
+
         portal.mxid = room_id
+        e2be_ok = await portal.check_dm_encryption()
+        # TODO Consider setting other power levels that get set on portal creation,
+        #      but they're of little use when the inviting user has an equal PL...
+        await portal.save()
+        if e2be_ok is True:
+            evt_type, content = await self.e2ee.encrypt(
+                room_id, EventType.ROOM_MESSAGE,
+                TextMessageEventContent(msgtype=MessageType.NOTICE,
+                                        body="Portal to private chat created and end-to-bridge"
+                                             " encryption enabled."))
+            await intent.send_message_event(room_id, evt_type, content)
+        else:
+            message = "Portal to private chat created."
+            if e2be_ok is False:
+                message += "\n\nWarning: Failed to enable end-to-bridge encryption"
+            await intent.send_notice(room_id, message)
+
         # TODO Put pause/resume in portal methods, with a lock or something
+        # TODO Consider not backfilling on invite.
+        #      To do so, must set the last-seen message ID appropriately
         await invited_by.client.pause()
         try:
-            chat_info = await invited_by.client.get_chat(chat_id)
+            chat_info = await invited_by.client.get_chat(puppet.mid)
             await portal.update_matrix_room(invited_by, chat_info)
         finally:
             await invited_by.client.resume()

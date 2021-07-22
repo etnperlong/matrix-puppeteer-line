@@ -258,6 +258,7 @@ export default class Client {
 				send: req => this.puppet.sendMessage(req.chat_id, req.text),
 				send_file: req => this.puppet.sendFile(req.chat_id, req.file_path),
 				set_last_message_ids: req => this.puppet.setLastMessageIDs(req.msg_ids, req.own_msg_ids, req.rct_ids),
+				forget_chat: req => this.puppet.forgetChat(req.chat_id),
 				pause: () => this.puppet.stopObserving(),
 				resume: () => this.puppet.startObserving(),
 				get_own_profile: () => this.puppet.getOwnProfile(),

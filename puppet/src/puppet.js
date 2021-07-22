@@ -538,6 +538,13 @@ export default class MessagesPuppeteer {
 		}
 	}
 
+	forgetChat(chatID) {
+		this.mostRecentMessages.delete(chatID)
+		this.mostRecentOwnMessages.delete(chatID)
+		this.mostRecentReceipts.delete(chatID)
+		// TODO Delete chat from recents list
+	}
+
 	async readImage(imageUrl) {
 		return await this.taskQueue.push(() =>
 			this.page.evaluate(
