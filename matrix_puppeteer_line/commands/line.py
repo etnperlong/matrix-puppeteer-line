@@ -26,6 +26,7 @@ SECTION_CHATS = HelpSection("Contacts & Chats", 40, "")
 async def list_contacts(evt: CommandEvent) -> None:
     # TODO Use a generator if it's worth it
     puppets = await pu.Puppet.get_all()
+    puppets.sort(key=lambda puppet: puppet.name)
     results = "".join(f"* [{puppet.name}](https://matrix.to/#/{puppet.default_mxid})\n"
                       for puppet in puppets)
     if results:
