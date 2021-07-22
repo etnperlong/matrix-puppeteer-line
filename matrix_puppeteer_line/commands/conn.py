@@ -41,12 +41,18 @@ async def ping(evt: CommandEvent) -> None:
 
 
 @command_handler(needs_auth=True, management_only=False, help_section=SECTION_CONNECTION,
-                 help_text="Synchronize contacts and portals")
+                 help_text="Synchronize contacts and chats", help_args="[_limit_]")
 async def sync(evt: CommandEvent) -> None:
-    await evt.sender.sync()
+    limit = 0
+    for arg in evt.args:
+        try:
+            limit = int(arg)
+        except ValueError:
+            pass
+    await evt.sender.sync(limit)
 
 
 @command_handler(needs_auth=True, management_only=False, help_section=SECTION_CONNECTION,
-                 help_text="Synchronize contacts")
+                 help_text="Synchronize contacts only")
 async def sync_contacts(evt: CommandEvent) -> None:
     await evt.sender.sync_contacts()

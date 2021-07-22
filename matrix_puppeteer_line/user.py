@@ -131,7 +131,7 @@ class User(DBUser, BaseUser):
             self._track_metric(METRIC_CONNECTED, await self.client.is_connected())
             await asyncio.sleep(5)
 
-    async def sync(self) -> None:
+    async def sync(self, limit: int = 0) -> None:
         await self.sync_contacts()
         # TODO Use some kind of async lock / event to queue syncing actions
         self.is_syncing = True
@@ -139,24 +139,32 @@ class User(DBUser, BaseUser):
             self._connection_check_task.cancel()
         self._connection_check_task = self.loop.create_task(self._check_connection_loop())
         await self.client.pause()
-        await self.sync_own_profile()
-        await self.client.set_last_message_ids(
-            await DBMessage.get_max_mids(),
-            await DBMessage.get_max_outgoing_mids(),
-            await DBReceipt.get_max_mids_per_num_read())
-        limit = self.config["bridge.initial_conversation_sync"]
-        self.log.info("Syncing chats")
-        await self.send_bridge_notice("Synchronizing chats...")
+        try:
+            await self.sync_own_profile()
+            await self.client.set_last_message_ids(
+                await DBMessage.get_max_mids(),
+                await DBMessage.get_max_outgoing_mids(),
+                await DBReceipt.get_max_mids_per_num_read())
 
-        # TODO Since only chat ID is used, retrieve only that
-        chat_infos = await self.client.get_chats()
-        for chat_info in chat_infos[:limit]:
-            portal = await po.Portal.get_by_chat_id(chat_info.id, create=True)
-            chat_info_full = await self.client.get_chat(chat_info.id)
-            await portal.create_matrix_room(self, chat_info_full)
-        await self.send_bridge_notice("Chat synchronization complete")
-        await self.client.resume()
-        self.is_syncing = False
+            if limit <= 0:
+                limit = self.config["bridge.initial_conversation_sync"]
+                if limit == 0:
+                    self.log.info("Skipping chat sync")
+                    return
+
+            self.log.info("Syncing chats")
+            await self.send_bridge_notice("Synchronizing chats...")
+
+            # TODO Since only chat ID is used, retrieve only that
+            chat_infos = await self.client.get_chats()
+            for chat_info in chat_infos[:limit]:
+                portal = await po.Portal.get_by_chat_id(chat_info.id, create=True)
+                chat_info_full = await self.client.get_chat(chat_info.id)
+                await portal.create_matrix_room(self, chat_info_full)
+            await self.send_bridge_notice("Chat synchronization complete")
+        finally:
+            await self.client.resume()
+            self.is_syncing = False
 
     async def sync_contacts(self) -> None:
         await self.send_bridge_notice("Synchronizing contacts...")

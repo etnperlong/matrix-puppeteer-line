@@ -81,8 +81,9 @@ bridge:
     # Maximum length of displayname
     displayname_max_length: 100
 
-    # Number of conversations to sync (and create portals for) on login.
-    # Set 0 to disable automatic syncing.
+    # Number of conversations to sync (and create portals for) on login
+    # and with the "sync" command with no numeric argument passed to it.
+    # Set 0 to disable automatic syncing on login.
     initial_conversation_sync: 10
     # Whether or not the LINE users of logged in Matrix users should be
     # invited to rooms when the user sends a message from another client.
@@ -97,7 +98,7 @@ bridge:
     # Whether or not created rooms should have federation enabled.
     # If false, created portal rooms will never be federated.
     federate_rooms: true
-    # Settings for backfilling messages from the Messages app.
+    # Settings for backfilling messages.
     backfill:
         # If using double puppeting, should notifications be disabled
         # while the initial backfill is in progress?
