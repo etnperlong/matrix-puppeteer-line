@@ -80,6 +80,9 @@ class MatrixHandler(BaseMatrixHandler):
 
         await portal.handle_matrix_leave(user)
 
+    async def handle_reject(self, room_id: RoomID, user_id: UserID, reason: str, event_id: EventID) -> None:
+        await self.handle_leave(room_id, user_id, event_id)
+
     async def handle_read_receipt(self, user: 'u.User', portal: 'po.Portal', event_id: EventID,
                                   data: SingleReceiptEventContent) -> None:
         # When reading a bridged message, view its chat in LINE, to make it send a read receipt.

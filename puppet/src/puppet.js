@@ -171,6 +171,21 @@ export default class MessagesPuppeteer {
 		}
 	}
 
+	async _retryUntilSuccess(numTries, failMessage, fn, ...args) {
+		while (true) {
+			try {
+				await fn(...args)
+				return
+			} catch (e) {
+				if (numTries && --numTries == 0) {
+					throw e
+				} else if (failMessage) {
+					this.log(failMessage)
+				}
+			}
+		}
+	}
+
 	/**
 	 * Set the contents of a text input field to the given text.
 	 * Works by triple-clicking the input field to select all existing text, to replace it on type.
@@ -428,8 +443,31 @@ export default class MessagesPuppeteer {
 	 * @return {Promise<ChatListInfo[]>} - List of chat IDs in order of most recent message.
 	 */
 	async getRecentChats() {
-		return await this.taskQueue.push(() =>
-			this.page.evaluate(() => window.__mautrixController.parseChatList()))
+		return await this.taskQueue.push(async () => {
+			await this._visitJoinedNonrecentGroups()
+			return await this.page.evaluate(() => window.__mautrixController.parseChatList())
+		})
+	}
+
+	/**
+	 * Visit all groups that aren't in the list of recent chats.
+	 * Doing so will put them in that list, so they will be included in syncs.
+	 *
+	 * TODO Instead of visiting the groups, just sync the groups' metadata, and
+	 *      lazy-create portals for them via GET /_matrix/app/v1/rooms/{roomAlias}.
+	 *      But that requires portals to have an alias! Use the chat ID for that.
+	 */
+	async _visitJoinedNonrecentGroups() {
+		// Group list is only populated once it's viewed!
+		await this.page.$eval("#leftSide li[data-type=groups_list] > button", e => e.click())
+		await this.page.waitForSelector("#wrap_group_list > div.MdScroll")
+
+		const groupIDs = await this.page.evaluate(() => window.__mautrixController.getJoinedNonrecentGroupIDs())
+		for (const groupID of groupIDs) {
+			await this._switchChat(groupID)
+		}
+
+		await this.page.$eval("#leftSide li[data-type=chats_list] > button", e => e.click())
 	}
 
 	/**
@@ -667,27 +705,20 @@ export default class MessagesPuppeteer {
 		return `#contact_wrap_friends > ul > li[data-mid="${id}"]`
 	}
 
+	_groupItemSelector(id) {
+		return `#joined_group_list_body > li[data-chatid="${id}"]`
+	}
+
 	async _switchChat(chatID, forceView = false) {
 		// TODO Allow passing in an element directly
 		this.log(`Switching to chat ${chatID}`)
-		let chatListItem = await this.page.$(this._chatItemSelector(chatID))
-		if (!chatListItem) {
-			this.log(`Chat ${chatID} not in recents list`)
-			if (chatID.charAt(0) == 'u') {
-				const friendsListItem = await this.page.$(this._friendItemSelector(chatID))
-				if (!friendsListItem) {
-					throw `Cannot find friend with ID ${chatID}`
-				}
-				friendsListItem.evaluate(e => e.click()) // Evaluate in browser context to avoid having to view tab
-			} else {
-				// TODO
-				throw "Can't yet get info of new groups/rooms"
-			}
-			chatListItem = await this.page.waitForSelector(this._chatItemSelector(chatID))
-		}
+		let chatItem = await this.page.$(this._chatItemSelector(chatID))
 
-		const chatName = await chatListItem.evaluate(
-			element => window.__mautrixController.getChatListItemName(element))
+		let chatName
+		if (!!chatItem) {
+			chatName = await chatItem.evaluate(
+				element => window.__mautrixController.getChatListItemName(element))
+		}
 
 		const isCorrectChatVisible = (targetText) => {
 			const chatHeader = document.querySelector("#_chat_header_area > .mdRGT04Link")
@@ -696,7 +727,7 @@ export default class MessagesPuppeteer {
 			return chatHeaderTitleElement.innerText == targetText
 		}
 
-		if (await this.page.evaluate(isCorrectChatVisible, chatName)) {
+		if (!!chatItem && await this.page.evaluate(isCorrectChatVisible, chatName)) {
 			if (!forceView) {
 				this.log("Already viewing chat, no need to switch")
 			} else {
@@ -711,27 +742,57 @@ export default class MessagesPuppeteer {
 				() => window.__mautrixController.removeMsgListObserver())
 			this.log(hadMsgListObserver ? "Observer was already removed" : "Removed observer")
 
-			await this._interactWithPage(async () => {
-				let numTries = 3
-				while (true) {
-					try {
-						this.log("Clicking chat list item")
-						chatListItem.click()
-						this.log(`Waiting for chat header title to be "${chatName}"`)
-						await this.page.waitForFunction(
-							isCorrectChatVisible,
-							{polling: "mutation", timeout: 1000},
-							chatName)
-						break
-					} catch (e) {
-						if (--numTries == 0) {
-							throw e
-						} else {
-							this.log("Clicking chat list item didn't work...try again")
-						}
+			let switchedTabs = false
+			let needRealClick = false
+			if (!chatItem) {
+				this.log(`Chat ${chatID} not in recents list`)
+
+				if (chatID.charAt(0) != "u") {
+					needRealClick = true
+					const unselectedTabButton = await this.page.$(`#leftSide li[data-type=groups_list] > button:not(.ExSelected)`)
+					if (unselectedTabButton) {
+						switchedTabs = true
+						await unselectedTabButton.evaluate(e => e.click())
+						await this.page.waitForSelector("#wrap_group_list > div.MdScroll")
 					}
+					chatItem = await this.page.$(this._groupItemSelector(chatID))
+				} else {
+					chatItem = await this.page.$(this._friendItemSelector(chatID))
 				}
 
+				if (!chatItem) {
+					throw `Cannot find a ${type} with ID ${chatID}`
+				}
+
+				// Both functions are the same, but keep them separate in case the
+				// HTML of friend/group item titles ever diverge
+				chatName = await chatItem.evaluate(
+					chatID.charAt(0) == "u"
+					? element => window.__mautrixController.getFriendsListItemName(element)
+					: element => window.__mautrixController.getGroupListItemName(element))
+			}
+
+			await this._retryUntilSuccess(3, "Clicking chat item didn't work...try again",
+				async () => {
+					this.log("Clicking chat item")
+					if (!needRealClick) {
+						await chatItem.evaluate(e => e.click())
+					} else {
+						await this._interactWithPage(async () => {
+							chatItem.click()
+						})
+					}
+					this.log(`Waiting for chat header title to be "${chatName}"`)
+					await this.page.waitForFunction(
+						isCorrectChatVisible,
+						{polling: "mutation", timeout: 1000},
+						chatName)
+				})
+			if (switchedTabs) {
+				await this.page.$eval("#leftSide li[data-type=chats_list] > button", e => e.click())
+			}
+
+			await this._interactWithPage(async () => {
 				// Always show the chat details sidebar, as this makes life easier
 				this.log("Waiting for detail area to be auto-hidden upon entering chat")
 				await this.page.waitForFunction(
@@ -739,10 +800,13 @@ export default class MessagesPuppeteer {
 					{},
 					await this.page.$("#_chat_detail_area"))
 
-				this.log("Clicking chat header to show detail area")
-				await this.page.click("#_chat_header_area > .mdRGT04Link")
-				this.log("Waiting for detail area")
-				await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info")
+				await this._retryUntilSuccess(3, "Clicking chat header didn't work...try again",
+					async () => {
+						this.log("Clicking chat header to show detail area")
+						await this.page.click("#_chat_header_area > .mdRGT04Link")
+						this.log("Waiting for detail area")
+						await this.page.waitForSelector("#_chat_detail_area > .mdRGT02Info", {timeout: 1000})
+					})
 			})
 
 			this.log("Waiting for any item to appear in chat")
@@ -862,18 +926,14 @@ export default class MessagesPuppeteer {
 			// Setting its innerText directly works fine though...
 			await input.click()
 			await input.evaluate((e, text) => e.innerText = text, text)
-			while (true) {
-				await input.press("Enter")
-				try {
+			await this._retryUntilSuccess(0, "Failed to press Enter when sending message, try again",
+				async () => {
+					await input.press("Enter")
 					await this.page.waitForFunction(
 						e => e.innerText == "",
 						{timeout: 500},
 						input)
-					break
-				} catch (e) {
-					this.error(`Failed to press Enter when sending message, try again (${e})`)
-				}
-			}
+				})
 		})
 
 		return await this._waitForSentMessage(chatID)

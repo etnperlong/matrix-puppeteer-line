@@ -904,6 +904,47 @@ class MautrixController {
 		}))
 	}
 
+	getGroupListItemName(element) {
+		return element.title
+	}
+
+	getGroupListItemAvatar(element) {
+		// Does have data-picture-path
+		return this._getPathImage(element.querySelector(".mdCMN04Img > img[src]"))
+	}
+
+	getGroupListItemID(element) {
+		return element.getAttribute("data-chatid")
+	}
+
+	/**
+	 * Parse a group list item element.
+	 *
+	 * @param {Element} element - The element to parse.
+	 * @param {?string} knownID - The ID of this element, if it is known.
+	 * @return {Participant}    - The info in the element.
+	 */
+	parseGroupListItem(element, knownID) {
+		return {
+			id: knownID || this.getGroupListItemID(element),
+			avatar: this.getGroupListItemAvatar(element),
+			name: this.getGroupListItemName(element),
+		}
+	}
+
+	/**
+	 * Parse the group list.
+	 *
+	 * @param {boolean} invited - Whether to parse the list of invited groups instead of joined groups.
+	 * @return {Participant[]}
+	 */
+	parseGroupList(invited = false) {
+		const groups = []
+		document.querySelectorAll(`#${invited ? "invited" : "joined"}_group_list_body > li[data-chatid="${id}"]`)
+		.forEach(e => groups.push(this.parseGroupListItem(e)))
+		return groups
+	}
+
 	/**
 	 * @typedef ChatListInfo
 	 * @type object
@@ -974,6 +1015,22 @@ class MautrixController {
 			lastMsgDate: this.getChatListItemLastMsgDate(element),
 			notificationCount: this.getChatListItemNotificationCount(element),
 		}
+	}
+
+	/**
+	 * Return the IDs of all groups that aren't in the list of recent chats.
+	 *
+	 * @return {string[]} - The list of group IDs.
+	 */
+	getJoinedNonrecentGroupIDs() {
+		const ids = []
+		for (const e of document.querySelectorAll("#joined_group_list_body > li[data-chatid]")) {
+			const id = e.getAttribute("data-chatid")
+			if (!document.querySelector(`#_chat_list_body > li > div[data-chatid="${id}"]`)) {
+				ids.push(id)
+			}
+		}
+		return ids
 	}
 
 	/**
