@@ -178,9 +178,11 @@ class User(DBUser, BaseUser):
         chat_id = portal.chat_id
         self.log.info(f"Viewing (and syncing) chat {chat_id}")
         await self.client.pause()
-        chat = await self.client.get_chat(chat_id, True)
-        await portal.update_matrix_room(self, chat)
-        await self.client.resume()
+        try:
+            chat = await self.client.get_chat(chat_id, True)
+            await portal.update_matrix_room(self, chat)
+        finally:
+            await self.client.resume()
 
     async def sync_own_profile(self) -> None:
         self.log.info("Syncing own LINE profile info")

@@ -1752,7 +1752,7 @@ new MutationObserver(() => {
 	if (!layer.classList.contains("MdNonDisp")) {
 		const button = layer.querySelector("dialog button")
 		if (button) {
-			console.log("Something expired, clicking OK button to continue")
+			console.log("Popup appeared, clicking OK button to continue")
 			button.click()
 		}
 	}
