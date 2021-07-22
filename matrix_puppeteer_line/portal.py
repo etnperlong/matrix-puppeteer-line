@@ -99,6 +99,10 @@ class Portal(DBPortal, BasePortal):
         return not self.is_direct or (self.encrypted and self.matrix.e2ee)
 
     @property
+    def needs_portal_meta(self) -> bool:
+        return self.encrypted or not self.is_direct or self.config["bridge.private_chat_portal_meta"]
+
+    @property
     def main_intent(self) -> IntentAPI:
         if not self._main_intent:
             raise ValueError("Portal must be postinit()ed before main_intent can be used")
@@ -510,17 +514,14 @@ class Portal(DBPortal, BasePortal):
             else:
                 self.log.warning(f"Could not find ID of LINE user {participant.name}")
                 puppet = await p.Puppet.get_by_profile(participant, client)
-        # TODO Consider setting no room name for non-group chats.
-        #      But then the LINE bot itself may appear in the title...
-        changed = await self._update_name(f"{conv.name} (LINE)")
-        if client:
-            if not self.is_direct:
-                changed = await self._update_icon(conv.icon, client) or changed
-            elif puppet and puppet.avatar_mxc != self.icon_mxc:
-                changed = True
-                self.icon_mxc = puppet.avatar_mxc
-                if self.mxid:
-                    await self.main_intent.set_room_avatar(self.mxid, self.icon_mxc)
+
+        if self.needs_portal_meta:
+            changed = await self._update_name(f"{conv.name} (LINE)")
+            path_image = conv.icon if not self.is_direct else participant.avatar
+            changed = await self._update_icon(path_image, client) or changed
+        else:
+            changed = await self._update_name(None)
+            changed = await self._update_icon(None, client) or changed
         if changed:
             await self.update_bridge_info()
             await self.update()
@@ -528,7 +529,7 @@ class Portal(DBPortal, BasePortal):
         #      when their user actually joined or sent a message.
         #await self._update_participants(conv.participants)
 
-    async def _update_name(self, name: str) -> bool:
+    async def _update_name(self, name: Optional[str]) -> bool:
         if self.name != name:
             self.name = name
             if self.mxid:
@@ -536,7 +537,7 @@ class Portal(DBPortal, BasePortal):
             return True
         return False
 
-    async def _update_icon(self, icon: Optional[PathImage], client: Client) -> bool:
+    async def _update_icon(self, icon: Optional[PathImage], client: Optional[Client]) -> bool:
         if icon:
             if icon.url and not icon.path:
                 self.log.warn(f"Using URL as path for room icon of {self.name}")
@@ -551,6 +552,9 @@ class Portal(DBPortal, BasePortal):
             self.log.info(f"Updating room icon of {self.name}")
             self.icon_path = icon_path
             if icon_url:
+                if not client:
+                    self.log.error(f"Cannot update room icon: no connection to LINE")
+                    return
                 resp = await client.read_image(icon.url)
                 self.icon_mxc = await self.main_intent.upload_media(resp.data, mime_type=resp.mime)
             else:
@@ -722,9 +726,8 @@ class Portal(DBPortal, BasePortal):
         if self.mxid:
             await self._update_matrix_room(source, info)
             return self.mxid
-        await self.update_info(info, source.client)
+
         self.log.debug("Creating Matrix room")
-        name: Optional[str] = None
         initial_state = [{
             "type": str(StateBridge),
             "state_key": self.bridge_info_state_key,
@@ -745,15 +748,13 @@ class Portal(DBPortal, BasePortal):
             })
             if self.is_direct:
                 invites.append(self.az.bot_mxid)
-        # NOTE Set the room title even for direct chats, because
-        #      the LINE bot itself may appear in the title otherwise.
-        #if self.encrypted or not self.is_direct:
-        name = self.name
+
         if self.config["appservice.community_id"]:
             initial_state.append({
                 "type": "m.room.related_groups",
                 "content": {"groups": [self.config["appservice.community_id"]]},
             })
+
         initial_state.append({
             "type": str(EventType.ROOM_POWER_LEVELS),
             "content": {
@@ -768,6 +769,8 @@ class Portal(DBPortal, BasePortal):
                 }
             }
         })
+
+        await self.update_info(info, source.client)
         if self.icon_mxc:
             initial_state.append({
                 "type": str(EventType.ROOM_AVATAR),
@@ -779,7 +782,7 @@ class Portal(DBPortal, BasePortal):
         # We lock backfill lock here so any messages that come between the room being created
         # and the initial backfill finishing wouldn't be bridged before the backfill messages.
         with self.backfill_lock:
-            self.mxid = await self.main_intent.create_room(name=name, is_direct=self.is_direct,
+            self.mxid = await self.main_intent.create_room(name=self.name, is_direct=self.is_direct,
                                                            initial_state=initial_state,
                                                            invitees=invites)
             if not self.mxid:
