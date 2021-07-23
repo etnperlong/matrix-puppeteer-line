@@ -563,6 +563,9 @@ export default class MessagesPuppeteer {
 	}
 
 	async _cycleChatUnsafe() {
+		this.log("Cycling chats")
+		const initialID = this.cycleTimerID
+
 		const currentChatID = await this.page.evaluate(() => window.__mautrixController.getCurrentChatID())
 		const chatList = await this.page.evaluate(() => window.__mautrixController.parseChatListForCycle())
 		// Add 1 to start at the chat after the currently-viewed one
@@ -608,7 +611,9 @@ export default class MessagesPuppeteer {
 			this.log("Found no chats in need of read receipt updates")
 		}
 
-		this._cycleTimerStart()
+		if (this.cycleTimerID == initialID) {
+			this._cycleTimerStart()
+		}
 	}
 
 	/**
@@ -621,6 +626,8 @@ export default class MessagesPuppeteer {
 
 	_jiggleMouse() {
 		this.log("Jiggling mouse")
+		const initialID = this.jiggleTimerID
+
 		exec(`xdotool mousemove --sync --window ${this.windowID} 0 0`, {},
 		(error, stdout, stderr) => {
 			if (error) {
@@ -628,7 +635,10 @@ export default class MessagesPuppeteer {
 			} else {
 				this.log("Jiggled mouse")
 			}
-			this._jiggleTimerStart()
+
+			if (this.jiggleTimerID == initialID) {
+				this._jiggleTimerStart()
+			}
 		})
 	}
 
