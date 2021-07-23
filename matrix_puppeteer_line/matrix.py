@@ -130,6 +130,24 @@ class MatrixHandler(BaseMatrixHandler):
         finally:
             await invited_by.client.resume()
 
+    async def handle_join(self, room_id: RoomID, user_id: UserID, _: EventID) -> None:
+        user = await u.User.get_by_mxid(user_id)
+
+        portal = await po.Portal.get_by_mxid(room_id)
+        if not portal:
+            return
+
+        if not user.is_whitelisted:
+            await portal.main_intent.kick_user(room_id, user.mxid,
+                                               "You are not whitelisted on this LINE bridge.")
+            return
+        elif not await user.is_logged_in():
+            await portal.main_intent.kick_user(room_id, user.mxid,
+                                               "You are not logged in to this LINE bridge.")
+            return
+
+        self.log.debug(f"{user.mxid} joined {room_id}")
+
     async def handle_leave(self, room_id: RoomID, user_id: UserID, event_id: EventID) -> None:
         portal = await po.Portal.get_by_mxid(room_id)
         if not portal:
