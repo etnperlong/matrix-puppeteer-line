@@ -3,6 +3,8 @@
     * [systemd](#systemd)
 * [Docker](#docker)
 
+---
+
 # Obtaining the LINE Chrome extension
 For all modes of deploying the bridge, it is first required to manually download a .crx or .zip file of the [LINE Chrome extension](https://chrome.google.com/webstore/detail/line/ophjlpahpchlmihnnnihgmmeilfjmjjc) (current version: 2.4.5).
 
@@ -85,7 +87,7 @@ To use them as-is, follow these steps after [initial setup](#initial-setup):
     * To install as user units:
         1. Copy/link the service files to a directory in the user unit search path, such as `~/.config/systemd/user`
         1. Create the services' configuration directory with `mkdir $XDG_CONFIG_HOME/matrix-puppeteer-line`
-1. Copy the bridge & Puppeteer module configuration files to the services' configuration directory as `config.yaml` and `puppet-config.yaml`, respectively
+1. Copy the bridge & Puppeteer module configuration files to the services' configuration directory as `config.yaml` and `puppet-config.json`, respectively
 1. Start the services now and on every boot boot with `[sudo] systemd [--user] enable --now matrix-puppeteer-line{,-chrome}`
 
 Note that stopping/restarting the bridge module service `matrix-puppeteer-line.service` does not affect the Puppeteer module service `matrix-puppeteer-line-chrome.service`, but stopping/restarting the latter will also stop/restart the former.
