@@ -109,7 +109,7 @@ export default class MessagesPuppeteer {
 			await this.page.waitForSelector(selector, 0)
 			const lineDetails = await this.page.$eval(selector, e => e.innerText)
 			const uuid = lineDetails.match(/(.*) : LINE : version/)[1]
-			this.log("Found extension UUID ${uuid}")
+			this.log(`Found extension UUID ${uuid}`)
 			MessagesPuppeteer.url = `chrome-extension://${uuid}/index.html`
 		}
 
