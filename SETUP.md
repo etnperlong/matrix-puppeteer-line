@@ -27,6 +27,7 @@ These instructions describe how to install and run the bridge manually from a cl
 * Node 14
 * yarn 1.22.x (from either your distribution or `npm`)
 * postgresql 11
+* A LINE account on a smartphone (Android or iOS)
 
 ## Optional requirements
 * `xvfb-run` for easily running the Puppeteer module in a background X server
@@ -58,7 +59,8 @@ These instructions describe how to install and run the bridge manually from a cl
 ## Running manually
 1. In the `puppet` directory, launch the Puppeteer module with `yarn start` or `node src/main.js`
 1. In the project root directory, run the bridge module with `python -m matrix_puppeteer_line`
-1. Start a chat with the bot and follow the instructions
+1. Start a chat with the bot, and use one of the `login-email` or `login-qr` commands to sync your LINE account
+    * Note that on first use, you must enter a verification code on a smartphone version of LINE in order for the login to complete
 
 ### Running the Puppeteer module headless
 Puppeteer cannot be run in headless mode when using Chrome/Chromium with extensions (including the LINE extension).

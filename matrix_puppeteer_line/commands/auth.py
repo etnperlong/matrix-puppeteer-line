@@ -55,7 +55,7 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
     failure = False
     async for item in gen:
         if item[0] == "qr":
-            message = "Open LINE on your primary device and scan this QR code:"
+            message = "Open LINE on your smartphone and scan this QR code:"
             content = TextMessageEventContent(body=message, msgtype=MessageType.NOTICE)
             content.set_reply(evt.event_id)
             await evt.az.intent.send_message(evt.room_id, content)
