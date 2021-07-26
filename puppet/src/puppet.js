@@ -347,7 +347,6 @@ export default class MessagesPuppeteer {
 	_waitForLoginCancel() {
 		return new Promise((resolve, reject) => {
 			if (this.loginCancelled) {
-				this.loginCancelled = false
 				resolve()
 			} else {
 				reject()
