@@ -47,3 +47,8 @@ class User:
         if not row:
             return None
         return cls(**row)
+
+    @classmethod
+    async def discard_notice_room(cls, notice_room: RoomID) -> None:
+        await cls.db.execute('DELETE FROM "user" WHERE notice_room=$1',
+                              notice_room)

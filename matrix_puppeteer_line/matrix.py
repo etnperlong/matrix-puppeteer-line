@@ -22,6 +22,7 @@ from mautrix.types import (Event, EventType, MessageEvent, StateEvent, Encrypted
 from mautrix.errors import MatrixError
 
 from . import portal as po, puppet as pu, user as u
+from .db import User as DBUser
 
 if TYPE_CHECKING:
     from .__main__ import MessagesBridge
@@ -151,6 +152,14 @@ class MatrixHandler(BaseMatrixHandler):
     async def handle_leave(self, room_id: RoomID, user_id: UserID, event_id: EventID) -> None:
         portal = await po.Portal.get_by_mxid(room_id)
         if not portal:
+            intent = self.bridge.az.intent
+            try:
+                if len(await intent.get_room_members(room_id)) == 1:
+                    self.log.info(f"Bridge bot leaving empty room")
+                    await intent.leave_room(room_id)
+                    await DBUser.discard_notice_room(room_id)
+            except MatrixError:
+                self.log.exception(f"Failed to get member list of {room_id}")
             return
 
         user = await u.User.get_by_mxid(user_id, create=False)
