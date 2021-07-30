@@ -77,7 +77,7 @@ async def login_do(evt: CommandEvent, gen: AsyncGenerator[Tuple[str, str], None]
                 qr_event_id = await evt.az.intent.send_message(evt.room_id, content)
         elif item[0] == "pin":
             pin = item[1]
-            message = f"Enter this PIN in LINE on your primary device:\n{pin}"
+            message = f"Enter this PIN in LINE on your smartphone:\n{pin}"
             content = TextMessageEventContent(body=message, msgtype=MessageType.NOTICE)
             if pin_event_id:
                 content.set_edit(pin_event_id)
