@@ -795,7 +795,7 @@ export default class MessagesPuppeteer {
 						await chatItem.evaluate(e => e.click())
 					} else {
 						await this._interactWithPage(async () => {
-							chatItem.click()
+							await chatItem.click()
 						})
 					}
 					this.log(`Waiting for chat header title to be "${chatName}"`)
