@@ -119,6 +119,7 @@ async def login_email(evt: CommandEvent) -> None:
         return
     if not await login_prep(evt, "email"):
         return
+    await evt.reply("Logging in...")
     gen = evt.sender.client.login(
             evt.sender,
             login_data=dict(email=evt.args[0], password=evt.args[1]))
