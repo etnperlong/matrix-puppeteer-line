@@ -75,9 +75,10 @@ window.__mautrixReceivePIN = function (pin) {}
  */
 window.__mautrixExpiry = function (button) {}
 /**
+ * @param {string} message - The message of the most recent dialog that appeared on screen.
  * @return {void}
  */
-window.__mautrixLoggedOut = function() {}
+window.__mautrixLoggedOut = function(message) {}
 
 /**
  * typedef ChatTypeEnum
@@ -1756,14 +1757,19 @@ window.__mautrixController = new MautrixController()
 /**
  * Watch for an error dialog / PIN expiry dialog to appear, and click its "OK" button.
  * Must watch for both its parent appearing & it being added to its parent in the first place.
+ * TODO Clean up dialog message promise
  */
 const layer = document.querySelector("#layer_contents")
-new MutationObserver(() => {
+var resolveDialogMessage
+var promiseDialogMessage = new Promise(resolve => {resolveDialogMessage = resolve})
+new MutationObserver(async () => {
 	if (!layer.classList.contains("MdNonDisp")) {
 		const button = layer.querySelector("dialog button")
 		if (button) {
+			const dialogMessage = layer.querySelector("dialog p")?.innerText
 			console.log("Popup appeared, clicking OK button to continue")
 			button.click()
+			resolveDialogMessage(dialogMessage)
 		}
 	}
 }).observe(layer, {
@@ -1776,9 +1782,11 @@ new MutationObserver(() => {
  * Watch for being logged out.
  */
 const mainApp = document.querySelector("#mainApp")
-new MutationObserver(() => {
+new MutationObserver(async () => {
 	if (mainApp.classList.contains("MdNonDisp")) {
-		window.__mautrixLoggedOut()
+		const dialogMessage = await promiseDialogMessage
+		promiseDialogMessage = new Promise(resolve => {resolveDialogMessage = resolve})
+		await window.__mautrixLoggedOut(dialogMessage)
 	}
 }).observe(mainApp, {
 	attributes: true,

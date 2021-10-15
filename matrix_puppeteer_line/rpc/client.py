@@ -103,9 +103,9 @@ class Client(RPCClient):
 
         self.add_event_handler("receipt", wrapper)
 
-    async def on_logged_out(self, func: Callable[[], Awaitable[None]]) -> None:
-        async def wrapper(data: Dict[str, Any]) -> None:
-            await func()
+    async def on_logged_out(self, func: Callable[[str], Awaitable[None]]) -> None:
+        async def wrapper(data: Dict[str, str]) -> None:
+            await func(data.get("message"))
 
         self.add_event_handler("logged_out", wrapper)
 

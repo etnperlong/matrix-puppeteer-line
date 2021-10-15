@@ -225,8 +225,11 @@ class User(DBUser, BaseUser):
             await portal.create_matrix_room(self, chat_info)
         await portal.handle_remote_receipt(receipt)
 
-    async def handle_logged_out(self) -> None:
-        await self.send_bridge_notice("Logged out of LINE. Please run either \"login-qr\" or \"login-email\" to log back in.")
+    async def handle_logged_out(self, message: str) -> None:
+        newline = "\n"
+        await self.send_bridge_notice(
+            f"Logged out of LINE{'.' if not message else ' with message: ' + message.replace(newline, ' ') + newline} "
+             "Please run either \"login-qr\" or \"login-email\" to log back in.")
         if self._connection_check_task:
             self._connection_check_task.cancel()
             self._connection_check_task = None

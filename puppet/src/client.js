@@ -152,11 +152,12 @@ export default class Client {
 		})
 	}
 
-	sendLoggedOut() {
-		this.log("Sending logout notice to client")
+	sendLoggedOut(message) {
+		this.log(`Sending logout notice to client${!message ? "" : " with message: " + message}`)
 		return this._write({
 			id: --this.notificationID,
 			command: "logged_out",
+			message,
 		})
 	}
 

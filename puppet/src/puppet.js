@@ -1307,12 +1307,12 @@ export default class MessagesPuppeteer {
 		}
 	}
 
-	_onLoggedOut() {
-		this.log("Got logged out!")
+	_onLoggedOut(message) {
+		this.log(`Got logged out!${!message ? "" : " Message: " + message}`)
 		this.stopObserving()
 		this.page.bringToFront()
 		if (this.client) {
-			this.client.sendLoggedOut().catch(err =>
+			this.client.sendLoggedOut(message).catch(err =>
 				this.error("Failed to send logout notice to client:", err))
 		} else {
 			this.log("No client connected, not sending logout notice")
