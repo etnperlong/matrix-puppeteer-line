@@ -540,7 +540,7 @@ class Portal(DBPortal, BasePortal):
     async def _update_icon(self, icon: Optional[PathImage], client: Optional[Client]) -> bool:
         if icon:
             if icon.url and not icon.path:
-                self.log.warn(f"Using URL as path for room icon of {self.name}")
+                self.log.warn(f"Using URL as path for room icon of {self.name or self.chat_id}")
                 icon_path = icon_url = icon.url
             else:
                 icon_path = icon.path
@@ -549,7 +549,7 @@ class Portal(DBPortal, BasePortal):
             icon_path = icon_url = None
 
         if icon_path != self.icon_path:
-            self.log.info(f"Updating room icon of {self.name}")
+            self.log.info(f"Updating room icon of {self.name or self.chat_id}")
             self.icon_path = icon_path
             if icon_url:
                 if not client:
@@ -566,7 +566,7 @@ class Portal(DBPortal, BasePortal):
                     self.log.exception(f"Failed to set room icon: {e}")
             return True
         else:
-            self.log.debug(f"No need to update room icon of {self.name}, new icon has same path as old one")
+            self.log.debug(f"No need to update room icon of {self.name or self.chat_id}, new icon has same path as old one")
             return False
 
     async def _update_participants(self, participants: List[Participant]) -> None:
