@@ -126,6 +126,8 @@ export default class MessagesPuppeteer {
 		await this._preparePage(true)
 
 		this.log("Exposing functions")
+		await this.page.exposeFunction("__mautrixLog", this.log.bind(this))
+		await this.page.exposeFunction("__mautrixError", this.error.bind(this))
 		await this.page.exposeFunction("__mautrixReceiveQR", this._receiveQRChange.bind(this))
 		await this.page.exposeFunction("__mautrixSendEmailCredentials", this._sendEmailCredentials.bind(this))
 		await this.page.exposeFunction("__mautrixReceivePIN", this._receivePIN.bind(this))

@@ -23,6 +23,16 @@
  */
 window.__chronoParseDate = function (text, ref, option) {}
 /**
+ * @param {...string} text - The objects to log.
+ * @return {Promise<void>}
+ */
+window.__mautrixLog = function (...text) {}
+/**
+ * @param {...string} text - The objects to log.
+ * @return {Promise<void>}
+ */
+window.__mautrixError = function (...text) {}
+/**
  * @param {ChatListInfo[]} changes - The chats that changed.
  * @return {Promise<void>}
  */
