@@ -556,6 +556,11 @@ export default class MessagesPuppeteer {
 	}
 
 	_cycleTimerStart() {
+		if (MessagesPuppeteer.cycleDelay < 0) {
+			this.log("Chat cycling disabled")
+			return
+		}
+
 		this.cycleTimerID = setTimeout(
 			() => this.taskQueue.push(() => this._cycleChatUnsafe()),
 			MessagesPuppeteer.cycleDelay)

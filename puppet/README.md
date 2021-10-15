@@ -13,7 +13,7 @@ The `profile_dir` specifies which directory to put Chromium user data directorie
 The `extension_dir` specifies which directory contains the files for the LINE extension, which you must download yourself.
 
 ### Cycle delay
-`cycle_delay` specifies the period (in milliseconds) at which Puppeteer should view chats to check on their read receipts. Only chats with messages that haven't been fully read need to be checked.
+`cycle_delay` specifies the period (in milliseconds) at which Puppeteer should view chats to check on their read receipts. Only chats with messages that haven't been fully read need to be checked. Set to a negative value to disable this checking.
 
 ### `xdotool`
 Set `use_xdotool` to `true` to allow the Node process to manipulate the mouse cursor of the X server it runs in. Requires the `xdotool` utility to be installed. Highly recommended, especially when running in a background X server. Its default value is `false` so that running in a non-background X server won't interfere with a real mouse cursor.
