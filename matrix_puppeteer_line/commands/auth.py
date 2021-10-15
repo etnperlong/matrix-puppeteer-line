@@ -115,7 +115,7 @@ async def login_qr(evt: CommandEvent) -> None:
 async def login_email(evt: CommandEvent) -> None:
     await evt.az.intent.redact(evt.room_id, evt.event_id)
     if len(evt.args) != 2:
-        await evt.reply("Usage: `$cmdprefix+sp login <email> <password>`")
+        await evt.reply("Usage: `$cmdprefix+sp login-email <email> <password>`")
         return
     if not await login_prep(evt, "email"):
         return
