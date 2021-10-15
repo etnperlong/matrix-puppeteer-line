@@ -629,15 +629,12 @@ export default class MessagesPuppeteer {
 	}
 
 	_jiggleMouse() {
-		this.log("Jiggling mouse")
 		const initialID = this.jiggleTimerID
 
 		exec(`xdotool mousemove --sync --window ${this.windowID} 0 0`, {},
 		(error, stdout, stderr) => {
 			if (error) {
 				this.log(`Error while jiggling mouse: ${error}`)
-			} else {
-				this.log("Jiggled mouse")
 			}
 
 			if (this.jiggleTimerID == initialID) {
