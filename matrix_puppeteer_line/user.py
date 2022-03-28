@@ -22,6 +22,8 @@ from mautrix.types import UserID, RoomID
 from mautrix.appservice import AppService, IntentAPI
 from mautrix.util.opt_prometheus import Gauge
 
+from .commands.auth import auto_login
+
 from .db import User as DBUser, Portal as DBPortal, Message as DBMessage, Receipt as DBReceipt
 from .config import Config
 from .rpc import Client, Message, Receipt
@@ -117,6 +119,8 @@ class User(DBUser, BaseUser):
         if state.is_logged_in:
             await self.send_bridge_notice("Already logged in to LINE")
             self.loop.create_task(self._try_sync())
+        elif await auto_login(self):
+            await self.send_bridge_notice("Auto-logged in to LINE")
         else:
             await self.send_bridge_notice("Ready to log in to LINE")
 

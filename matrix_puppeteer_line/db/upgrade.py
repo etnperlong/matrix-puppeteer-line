@@ -170,3 +170,16 @@ async def upgrade_latest_read_receipts(conn: Connection) -> None:
 @upgrade_table.register(description="Allow messages with no mxid")
 async def upgrade_nomxid_msgs(conn: Connection) -> None:
     await conn.execute("ALTER TABLE message ALTER COLUMN mxid DROP NOT NULL")
+
+
+@upgrade_table.register(description="Allow storing email/password login credentials")
+async def upgrade_login_credentials(conn: Connection) -> None:
+    await conn.execute("""CREATE TABLE IF NOT EXISTS login_credential (
+        mxid        TEXT PRIMARY KEY,
+        email       TEXT NOT NULL,
+        password    TEXT NOT NULL,
+
+        FOREIGN KEY (mxid)
+            REFERENCES "user" (mxid)
+            ON DELETE CASCADE
+    )""")
