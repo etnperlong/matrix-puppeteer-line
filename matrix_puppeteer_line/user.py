@@ -230,13 +230,21 @@ class User(DBUser, BaseUser):
         await portal.handle_remote_receipt(receipt)
 
     async def handle_logged_out(self, message: str) -> None:
-        newline = "\n"
-        await self.send_bridge_notice(
-            f"Logged out of LINE{'.' if not message else ' with message: ' + message.replace(newline, ' ') + newline} "
-             "Please run either \"login-qr\" or \"login-email\" to log back in.")
         if self._connection_check_task:
             self._connection_check_task.cancel()
             self._connection_check_task = None
+        newline = "\n"
+        # TODO Use an asyncio.Task for auto-login
+        # TODO Don't auto-login if logout was intentional!
+        if await auto_login(self):
+            await self.send_bridge_notice(
+                f"Auto-logged back in to LINE{'' if not message else ' (logout reason: ' + message.replace(newline, ' ') + ')'}"
+            )
+        else:
+            await self.send_bridge_notice(
+                f"Logged out of LINE{'.' if not message else ' with message: ' + message.replace(newline, ' ') + newline} "
+                 "Please run either \"login-qr\" or \"login-email\" to log back in."
+             )
 
     def _add_to_cache(self) -> None:
         self.by_mxid[self.mxid] = self
