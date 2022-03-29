@@ -6,7 +6,7 @@
 ---
 
 # Obtaining the LINE Chrome extension
-For all modes of deploying the bridge, it is first required to manually download a .crx or .zip file of the [LINE Chrome extension](https://chrome.google.com/webstore/detail/line/ophjlpahpchlmihnnnihgmmeilfjmjjc) (current version: 2.4.5).
+For all modes of deploying the bridge, it is first required to manually download a .crx or .zip file of the [LINE Chrome extension](https://chrome.google.com/webstore/detail/line/ophjlpahpchlmihnnnihgmmeilfjmjjc) (current version: 2.5.0).
 
 The recommended way of doing this is to use the [CRX Extractor/Downloader](https://chrome.google.com/webstore/detail/crx-extractordownloader/ajkhmmldknmfjnmeedkbkkojgobmljda) extension for Chrome/Chromium:
 
