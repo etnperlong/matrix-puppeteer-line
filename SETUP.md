@@ -113,20 +113,21 @@ These instructions describe how to run the bridge with Docker containers.
 
 ## Initial setup
 1. `cd` to the directory where you cloned this repository
-1. Build the image for the bridge module with `docker build . -t matrix-puppeteer-line`
+1. Ensure that the repository root and `puppet` directories are writable by UID/GID 1337. A coarse way to achieve this is with `chmod o+w . puppet`
+1. Extract the downloaded .crx/.zip of the LINE Chrome extension to `puppet/extension_files`
 1. `cd` to the `puppet` directory, and build the image for the Puppeteer module with `docker build . -t matrix-puppeteer-line-chrome`
-1. Create a new directory outside of the repository directory, and `cd` into it
-1. Extract the downloaded .crx/.zip of the LINE Chrome extension to this directory
 1. Run a container for the Puppeteer module for the first time, so it can create a config file for you: `docker run --rm -v $(pwd):/data:z matrix-puppeteer-line-chrome`
-1. Update the config to your liking, but leave the `"executable_path"` setting as-is (unless you need to use a version of Chrome/Chromium from the host or another container).
+1. Update the config to your liking, but leave the `"executable_path"` setting as-is (unless you need to use a version of Chrome/Chromium from the host or another container)
 1. Run the Puppeteer module with `docker run --restart unless-stopped -v $(pwd):/data:z matrix-puppeteer-line-chrome`
+1. Open a new shell, since the prior `docker run` command runs in the foreground (unless `-d` is used)
+1. `cd` to the repository root, and build the image for the bridge module with `docker build . -t matrix-puppeteer-line`
 1. Run a container for the bridge module for the first time, so it can create a config file for you: `docker run --rm -v $(pwd):/data:z matrix-puppeteer-line`
 1. Update the config to your liking. You'll at least need to change the homeserver settings, appservice address and permissions, as well as the socket connection to the Puppeteer module
-    * Note that the Puppeteer module's default config uses a unix socket at `/data/puppet.sock`
+    * Note that the Puppeteer module container's `/data/` directory is accessible in the bridge module's container at `/data/puppet/`
+    * Thus, if the Puppeteer module is configured to use a unix socket at `/data/<sock_name>`, the bridge module's config must set `puppeteer.connection.path: /data/puppet/<sockname>`
 1. Generate the appservice registration by running the container again, and update your homeserver configuration to accept it
 1. Run the bridge module with `docker run --restart unless-stopped -v $(pwd):/data:z matrix-puppeteer-line`
-
-Additionally, you should either add the bridge to the same Docker network as your homeserver and datapase with `--network=<name>`, or expose the correct port(s) with `-p <port>:<port>.` (A quick-and-dirty option is to use `--network="host"`.)
+    * Additionally, you should either add the bridge to the same Docker network as your homeserver and database with `--network=<name>` (when they are running in Docker), or expose the correct port(s) with `-p <port>:<port>` or `--network=host` (when they are running outside Docker).
 
 ## Upgrading
 Simply `git pull` or `git rebase` the latest changes, rerun all `docker build` commands, then run new containers for the freshly-built images.
