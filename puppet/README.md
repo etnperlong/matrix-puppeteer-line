@@ -6,6 +6,9 @@ If `type` is `tcp`, `port` and `host` are the host/port where to listen.
 ### Executable path
 The `executable_path` specifies the path to the Chromium binary for Puppeteer to use. Leaving this setting blank will use the x86_64 Chromium installation bundled with Puppeteer. For other architectures, it is necessary to install a compatible version of Chromium (ideally via your distribution's package manager), and to set `executable_path` to the path of its binary (typically `/usr/bin/chromium`).
 
+### Sandbox
+Whether or not to pass the `--no-sandbox` flag to Chromium. May be required when running Chromium in a container.
+
 ### Profile directory
 The `profile_dir` specifies which directory to put Chromium user data directories.
 

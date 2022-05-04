@@ -82,7 +82,7 @@ export default class MessagesPuppeteer {
 			`--window-size=${MessagesPuppeteer.viewport.width},${MessagesPuppeteer.viewport.height+120}`,
 		]
 		if (MessagesPuppeteer.noSandbox) {
-			args = args.concat(`--no-sandbox`)
+			args.push(`--no-sandbox`)
 		}
 
 		this.browser = await puppeteer.launch({

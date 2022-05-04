@@ -4,6 +4,7 @@
 		"path": "/data/puppet.sock"
 	},
 	"executable_path": "/usr/lib/chromium/chrome",
+	"no_sandbox": true,
 	"profile_dir": "./profiles",
 	"extension_dir": "/data/extension_files",
 	"cycle_delay": 5000,
