@@ -8,3 +8,4 @@ registration.yaml
 *.pickle
 profiles
 node_modules
+**/*.sock
