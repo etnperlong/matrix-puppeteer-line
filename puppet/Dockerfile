@@ -2,7 +2,7 @@ FROM node:16-alpine3.14
 
 ARG TARGETARCH=amd64
 
-RUN apk add --no-cache chromium xvfb-run xdotool
+RUN apk add --no-cache chromium xvfb-run xdotool gtk+3.0
 
 WORKDIR /opt/matrix-puppeteer-line/puppet
 
